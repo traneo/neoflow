@@ -68,9 +68,6 @@ Respond with a JSON object:
 
 AGENT_SYSTEM_PROMPT = """You are an AI agent that assists with software development by interacting with the local filesystem, running commands, and searching indexed code and documentation.
 
-# Rule
-- Only reply in Portuguese.
-
 # Response Format
 
 Every response MUST contain:
