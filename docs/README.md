@@ -14,6 +14,7 @@ Welcome to the NeoFlow documentation! This directory contains comprehensive guid
 - **[Agent System](AGENT_SYSTEM.md)** - Autonomous task execution with planning
 - **[Loop Detection](LOOP_DETECTION.md)** - Preventing and resolving infinite loops in agent execution
 - **[Template System](TEMPLATE_SYSTEM.md)** - Reusable query templates
+- **[MCP Integration](MCP_INTEGRATION.md)** - Model Context Protocol server for AI coding assistants
 
 ### Search & Data
 - **[Search Features](SEARCH_FEATURES.md)** - Semantic and hybrid search capabilities
@@ -36,6 +37,7 @@ Welcome to the NeoFlow documentation! This directory contains comprehensive guid
 | Run a search | [CLI Reference - Search Mode](CLI_REFERENCE.md#search-mode) |
 | Execute a task | [Agent System](AGENT_SYSTEM.md) |
 | Start the API server | [API Server](API_SERVER.md) |
+| Start the MCP server | [MCP Integration](MCP_INTEGRATION.md) |
 | Index GitLab repos | [GitLab Integration](GITLAB_INTEGRATION.md) |
 | Configure LLM provider | [LLM Providers](LLM_PROVIDERS.md) |
 | Create templates | [Template System](TEMPLATE_SYSTEM.md) |
@@ -62,6 +64,7 @@ docs/
 ├── CHAT_SYSTEM.md               # Chat mode documentation
 ├── AGENT_SYSTEM.md              # Agent mode documentation
 ├── API_SERVER.md                # REST API documentation
+├── MCP_INTEGRATION.md           # Model Context Protocol integration
 ├── SEARCH_FEATURES.md           # Search capabilities
 ├── GITLAB_INTEGRATION.md        # GitLab integration guide
 ├── DATA_IMPORT.md               # Data import guide

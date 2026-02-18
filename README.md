@@ -15,6 +15,7 @@ NeoFlow is an AI-powered development assistant designed to streamline the softwa
 - **GitLab Integration**: Integration with GitLab for code search and project context
 - **Multi-turn Conversations**: Maintain context through session-based chat interactions
 - **Template System**: Predefined query templates for common development tasks
+- **MCP Server**: Model Context Protocol server for integration with AI coding assistants (VS Code, Claude Desktop, Cursor)
 
 ## Installation
 
@@ -69,6 +70,13 @@ neoflow search -q "your search query"
 neoflow serve
 ```
 
+### MCP Server (AI Coding Assistant Integration)
+```bash
+neoflow mcp-server
+```
+
+Exposes NeoFlow's capabilities to AI coding assistants like VS Code with GitHub Copilot, Claude Desktop, and Cursor IDE. See [docs/MCP_INTEGRATION.md](docs/MCP_INTEGRATION.md) for setup instructions.
+
 For more commands and options:
 ```bash
 neoflow --help
@@ -89,6 +97,7 @@ Comprehensive documentation is available in the [docs/](docs/) directory:
 
 - **[Overview](docs/OVERVIEW.md)** - Architecture and detailed feature explanations
 - **[CLI Reference](docs/CLI_REFERENCE.md)** - Complete command reference
+- **[MCP Integration](docs/MCP_INTEGRATION.md)** - Model Context Protocol server for AI coding assistants
 - **[Agent System](docs/AGENT_SYSTEM.md)** - Autonomous task execution
 - **[Chat System](docs/CHAT_SYSTEM.md)** - Interactive conversation mode
 - **[Search Features](docs/SEARCH_FEATURES.md)** - Semantic search capabilities

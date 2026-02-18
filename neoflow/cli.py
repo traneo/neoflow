@@ -23,12 +23,14 @@ from neoflow.template import load_template, run_template_form, TemplateError
 console = Console()
 
 
-def _setup_logging(verbose: bool = False, info : bool = False):
+def _setup_logging(verbose: bool = False, info : bool = False, stderr_only: bool = False):
     level = logging.DEBUG if verbose else (logging.INFO if info else logging.ERROR)
+    # Use stderr console for MCP stdio mode to avoid interfering with JSON-RPC
+    log_console = Console(stderr=True) if stderr_only else console
     logging.basicConfig(
         level=level,
         format="%(message)s",
-        handlers=[RichHandler(console=console, rich_tracebacks=True)],
+        handlers=[RichHandler(console=log_console, rich_tracebacks=True)],
     )
 
 
@@ -299,6 +301,63 @@ def cmd_serve(args, config: Config):
         reload=args.reload,
         log_level="info",
     )
+
+
+def cmd_mcp_server(args, config: Config):
+    """Start the MCP (Model Context Protocol) server."""
+    import asyncio
+    from neoflow.mcp.server import run_mcp_server
+
+    if not config.mcp.enabled:
+        console.print("[yellow]MCP server is disabled in configuration[/yellow]")
+        console.print("Set MCP_ENABLED=true in your environment to enable it")
+        sys.exit(1)
+
+    transport = args.transport or config.mcp.transport
+
+    # For stdio transport, redirect all output to stderr to avoid interfering with JSON-RPC
+    if transport == "stdio":
+        stderr_console = Console(stderr=True)
+        stderr_console.print("[green bold]Starting NeoFlow MCP server[/green bold]")
+        stderr_console.print(f"[dim]Transport: {transport}[/dim]")
+        stderr_console.print(f"[dim]Available tools: ask_chat, search_code, search_documentation, search_tickets, [/dim]")
+        stderr_console.print(f"[dim]gitlab_live_search[/dim]")
+        stderr_console.print("[dim]Listening on stdio (for MCP clients like VS Code, Claude Desktop)...[/dim]")
+        stderr_console.print(f"[dim]Press Ctrl+C to stop[/dim]")
+    else:
+        console.print("[green bold]Starting NeoFlow MCP server[/green bold]")
+        console.print(f"[dim]Transport: {transport}[/dim]")
+        console.print(f"[dim]Available tools: ask_chat, search_code, search_documentation, search_tickets, gitlab_live_search[/dim]")
+        console.print(f"[dim]Listening on {config.mcp.sse_host}:{config.mcp.sse_port}...[/dim]")
+        console.print(f"[dim]Press Ctrl+C to stop[/dim]")
+
+    try:
+        asyncio.run(run_mcp_server(transport=transport, config=config))
+    except KeyboardInterrupt:
+        stderr_console = Console(stderr=True) if transport == "stdio" else console
+        stderr_console.print("\n[yellow]MCP server stopped by user[/yellow]")
+
+
+def cmd_mcp_proxy(args, config: Config):
+    """Start a local MCP proxy that connects to a remote NeoFlow MCP server over HTTP."""
+    import asyncio
+    from neoflow.mcp.proxy import run_proxy
+
+    remote_url = args.remote_url
+    auth_token = args.auth_token or config.mcp.auth_token
+
+    console.print("[green bold]Starting NeoFlow MCP HTTP Proxy[/green bold]")
+    console.print(f"[dim]Connecting to: {remote_url}[/dim]")
+    console.print(f"[dim]Local protocol: stdio (for VS Code, etc.)[/dim]")
+    console.print(f"[dim]Remote protocol: HTTP/SSE[/dim]")
+    if auth_token:
+        console.print(f"[dim]Authentication: enabled[/dim]")
+    console.print(f"[dim]Press Ctrl+C to stop[/dim]")
+
+    try:
+        asyncio.run(run_proxy(remote_url=remote_url, auth_token=auth_token))
+    except KeyboardInterrupt:
+        console.print("\n[yellow]MCP proxy stopped by user[/yellow]")
 
 
 def cmd_interactive(args, config: Config):
@@ -606,8 +665,38 @@ def main():
         help="Enable auto-reload for development",
     )
 
+    # mcp-server
+    mcp_parser = subparsers.add_parser("mcp-server", help="Start MCP (Model Context Protocol) server")
+    mcp_parser.add_argument(
+        "--transport", type=str, choices=["stdio", "sse"], default=None,
+        help="Transport protocol (default: stdio)",
+    )
+
+    # mcp-proxy
+    proxy_parser = subparsers.add_parser(
+        "mcp-proxy",
+        help="Proxy local MCP clients to a remote NeoFlow MCP server over HTTP"
+    )
+    proxy_parser.add_argument(
+        "--remote-url", type=str, required=True,
+        help="Remote MCP server URL (e.g., http://server.example.com:9721)",
+    )
+    proxy_parser.add_argument(
+        "--auth-token", type=str, default=None,
+        help="Authentication token for remote server (optional)",
+    )
+
     args = parser.parse_args()
-    _setup_logging(args.verbose, args.info)
+    
+    # For MCP server with stdio transport, we need to redirect all logging to stderr
+    # to avoid interfering with JSON-RPC over stdio
+    stderr_logging = False
+    if args.command == "mcp-server":
+        # Check if transport is stdio (either from args or will default to stdio)
+        transport = getattr(args, "transport", None) or "stdio"  # Default is stdio
+        stderr_logging = (transport == "stdio")
+    
+    _setup_logging(args.verbose, args.info, stderr_only=stderr_logging)
 
     user_config_override = get_or_create_neoflow_folder(console)
 
@@ -617,7 +706,9 @@ def main():
     if user_config_override:
         env_path = os.path.join(user_config_override, ".env")
         if os.path.isfile(env_path):
-            console.print(f"[green]Loading configuration from {env_path}[/green]")
+            # Use stderr for MCP stdio mode to avoid interfering with JSON-RPC
+            output_console = Console(stderr=True) if stderr_logging else console
+            output_console.print(f"[green]Loading configuration from {env_path}[/green]")
             load_dotenv(env_path)
     
     load_dotenv(override=True)
@@ -637,6 +728,8 @@ def main():
         "import-zip": cmd_import_zip,
         "config": cmd_config,
         "serve": cmd_serve,
+        "mcp-server": cmd_mcp_server,
+        "mcp-proxy": cmd_mcp_proxy,
     }
 
     if args.command in commands:

@@ -88,6 +88,19 @@ class ServerConfig:
 
 
 @dataclass
+class MCPConfig:
+    """Configuration for Model Context Protocol (MCP) server."""
+    enabled: bool = True
+    transport: str = "stdio"  # "stdio" or "sse"
+    sse_host: str = "localhost"
+    sse_port: int = 9721
+    max_results_limit: int = 20
+    timeout_seconds: int = 30
+    auth_required: bool = False
+    auth_token: str = ""
+
+
+@dataclass
 class Config:
     weaviate: WeaviateConfig = field(default_factory=WeaviateConfig)
     importer: ImporterConfig = field(default_factory=ImporterConfig)
@@ -95,6 +108,7 @@ class Config:
     agent: AgentConfig = field(default_factory=AgentConfig)
     chat: ChatConfig = field(default_factory=ChatConfig)
     server: ServerConfig = field(default_factory=ServerConfig)
+    mcp: MCPConfig = field(default_factory=MCPConfig)
     llm_provider: LLMProviderConfig = field(default_factory=LLMProviderConfig)
     reports_dir: str = "reports"
 
@@ -162,6 +176,21 @@ class Config:
         ))
         config.server.host = os.getenv("SERVER_HOST", config.server.host)
         config.server.port = int(os.getenv("SERVER_PORT", config.server.port))
+        
+        # MCP configuration
+        config.mcp.enabled = os.getenv(
+            "MCP_ENABLED", "true"
+        ).lower() in ("true", "1", "yes")
+        config.mcp.transport = os.getenv("MCP_TRANSPORT", config.mcp.transport)
+        config.mcp.sse_host = os.getenv("MCP_SSE_HOST", config.mcp.sse_host)
+        config.mcp.sse_port = int(os.getenv("MCP_SSE_PORT", config.mcp.sse_port))
+        config.mcp.timeout_seconds = int(os.getenv(
+            "MCP_TIMEOUT_SECONDS", config.mcp.timeout_seconds
+        ))
+        config.mcp.auth_required = os.getenv(
+            "MCP_AUTH_REQUIRED", "false"
+        ).lower() in ("true", "1", "yes")
+        config.mcp.auth_token = os.getenv("MCP_AUTH_TOKEN", config.mcp.auth_token)
         
         # LLM Provider configuration
         config.llm_provider.provider = os.getenv(

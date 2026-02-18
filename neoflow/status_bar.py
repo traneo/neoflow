@@ -49,7 +49,13 @@ class StatusBar:
     above the separator + status line.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, output_file=None, enabled: bool = True) -> None:
+        """Initialize the status bar.
+        
+        Args:
+            output_file: File object to write to (defaults to sys.stdout)
+            enabled: Whether the status bar is enabled (set to False to disable completely)
+        """
         self._state = StatusState()
         self._lock = threading.Lock()
         self._thread: threading.Thread | None = None
@@ -57,11 +63,15 @@ class StatusBar:
         self._frame_idx = 0
         self._prev_sigwinch = None
         self._paused = False
+        self._output_file = output_file or sys.stdout
+        self._enabled = enabled
 
     # -- Public API: lifecycle ------------------------------------------------
 
     def start(self) -> None:
         """Activate the status bar and begin rendering."""
+        if not self._enabled:
+            return  # Do nothing if disabled
         with self._lock:
             self._state.active = True
             self._state.start_time = time.time()
@@ -73,6 +83,8 @@ class StatusBar:
 
     def stop(self) -> None:
         """Tear down the status bar and restore the terminal."""
+        if not self._enabled:
+            return  # Do nothing if disabled
         self._stop_event.set()
         if self._thread is not None:
             self._thread.join(timeout=1)
@@ -187,25 +199,25 @@ class StatusBar:
         scroll_bottom = rows - reserved
         if scroll_bottom < 1:
             scroll_bottom = 1
-        sys.stdout.write(f"\033[1;{scroll_bottom}r")
-        sys.stdout.write(f"\033[{scroll_bottom};1H")
-        sys.stdout.flush()
+        self._output_file.write(f"\033[1;{scroll_bottom}r")
+        self._output_file.write(f"\033[{scroll_bottom};1H")
+        self._output_file.flush()
 
     def _restore_scroll_region(self) -> None:
         """Restore the full terminal scroll region and clear reserved lines."""
         cols, rows = self._get_terminal_size()
         reserved = self._reserved_lines()
         # Restore full scroll region
-        sys.stdout.write(f"\033[1;{rows}r")
+        self._output_file.write(f"\033[1;{rows}r")
         # Clear all reserved lines
         for i in range(reserved):
-            sys.stdout.write(f"\033[{rows - i};1H\033[2K")
+            self._output_file.write(f"\033[{rows - i};1H\033[2K")
         # Move cursor back up
         scroll_bottom = rows - reserved
         if scroll_bottom < 1:
             scroll_bottom = 1
-        sys.stdout.write(f"\033[{scroll_bottom};1H")
-        sys.stdout.flush()
+        self._output_file.write(f"\033[{scroll_bottom};1H")
+        self._output_file.flush()
 
     # -- SIGWINCH handling ---------------------------------------------------
 
@@ -308,8 +320,8 @@ class StatusBar:
         out += f"\033[{rows};1H\033[2K{status_line}"
         out += "\0338"  # Restore cursor
 
-        sys.stdout.write(out)
-        sys.stdout.flush()
+        self._output_file.write(out)
+        self._output_file.flush()
 
 
 def _format_tokens(count: int) -> str:
