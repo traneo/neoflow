@@ -1,5 +1,7 @@
 # NeoFlow
 
+![Alt text](neoflow.png)
+
 ## Project Overview
 
 NeoFlow is an AI-powered development assistant designed to streamline the software development process.
