@@ -1,6 +1,7 @@
 """YAML template loader and form runner for the /t= command."""
 
 import os
+from dataclasses import dataclass
 
 import yaml
 from rich.console import Console
@@ -10,6 +11,14 @@ from rich.prompt import Prompt
 
 class TemplateError(Exception):
     """Raised when a template is missing or invalid."""
+
+
+@dataclass
+class TemplateInfo:
+    """Information about a template."""
+    name: str
+    title: str
+    fields: list[str]
 
 
 def load_template(name: str, templates_dir: str = "templates") -> dict:
@@ -64,6 +73,48 @@ def load_template(name: str, templates_dir: str = "templates") -> dict:
         raise TemplateError(f"Template '{name}' prompt is missing a query.")
 
     return data
+
+
+def list_templates(templates_dir: str = "templates") -> list[TemplateInfo]:
+    """List all available templates in the templates directory.
+
+    Parameters
+    ----------
+    templates_dir:
+        Directory where templates are stored.
+
+    Returns
+    -------
+    list[TemplateInfo]
+        List of available templates with their metadata.
+    """
+    if not os.path.isdir(templates_dir):
+        return []
+    
+    templates = []
+    
+    for filename in sorted(os.listdir(templates_dir)):
+        if not filename.endswith(".yaml"):
+            continue
+        
+        name = filename.removesuffix(".yaml")
+        
+        try:
+            template_data = load_template(name, templates_dir)
+            form = template_data.get("form", {})
+            title = form.get("title", name)
+            fields = [field["alias"] for field in form.get("fields", [])]
+            
+            templates.append(TemplateInfo(
+                name=name,
+                title=title,
+                fields=fields
+            ))
+        except (TemplateError, KeyError, TypeError):
+            # Skip invalid templates
+            continue
+    
+    return templates
 
 
 def run_template_form(template: dict, console: Console) -> str:
