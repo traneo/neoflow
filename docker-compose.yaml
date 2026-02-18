@@ -1,0 +1,57 @@
+services:
+  weaviate:
+    command:
+      - --host
+      - 0.0.0.0
+      - --port
+      - '8080'
+      - --scheme
+      - http
+    image: cr.weaviate.io/semitechnologies/weaviate:1.35.1
+    ports:
+      - 8080:8080
+      - 50051:50051
+    volumes:
+      - weaviate_data:/var/lib/weaviate
+    restart: on-failure:0
+    container_name: weaviate
+    environment:
+      TEXT2VEC_OLLAMA_EMBEDDING_MODEL: 'nomic-embed-text'
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: 'true'
+      PERSISTENCE_DATA_PATH: '/var/lib/weaviate'
+      ENABLE_MODULES: 'text2vec-ollama,generative-ollama'
+      CLUSTER_HOSTNAME: 'node1'
+      OLLAMA_API_ENDPOINT: 'http://ollama:11434'
+      OLLAMA_API_URL: http://ollama:11434
+      GENERATIVE_OLLAMA_MODEL: 'glm-4.7-flash:latest'
+      OLLAMA_NUM_PARALLEL: 1
+
+  ollama:
+    image: ollama/ollama
+    container_name: ollama
+    runtime: nvidia
+    environment:
+      OLLAMA_NUM_BATCH: 512
+      OLLAMA_CONTEXT_LENGTH: 30000
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama:/root/.ollama
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped   
+
+  # vLLM services are available but disabled by default
+  # To enable vLLM, see docs/VLLM_SETUP.md for detailed configuration instructions
+
+volumes:
+  weaviate_data:
+  ollama:
+  vllm_models:

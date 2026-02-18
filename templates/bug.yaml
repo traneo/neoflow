@@ -1,0 +1,34 @@
+form:
+  title: "Bug Investigation"
+  fields:
+    - label: "Bug Description"
+      alias: "description"
+    
+    - label: "Error Message (if any)"
+      alias: "error"
+      default: "N/A"
+    
+    - label: "Affected Component"
+      alias: "component"
+    
+    - label: "Steps to Reproduce"
+      alias: "steps"
+
+prompt:
+  query: |
+    Investigate this bug:
+    
+    Description: {description}
+    Error: {error}
+    Component: {component}
+    
+    Steps to reproduce:
+    {steps}
+    
+    Search the codebase, documentation, and support tickets for:
+    1. Relevant code that might cause this issue
+    2. Similar past issues and their resolutions
+    3. Potential root causes
+    4. Suggested fixes
+    
+    Provide a detailed analysis with code references.

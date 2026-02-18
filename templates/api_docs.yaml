@@ -1,0 +1,31 @@
+form:
+  title: "API Endpoint Documentation"
+  fields:
+    - label: "Endpoint Path"
+      alias: "path"
+    
+    - label: "HTTP Method"
+      alias: "method"
+      default: "GET"
+    
+    - label: "Purpose"
+      alias: "purpose"
+
+prompt:
+  query: |
+    Generate comprehensive API documentation for:
+    
+    Endpoint: {method} {path}
+    Purpose: {purpose}
+    
+    Search the codebase for this endpoint and include:
+    - Description
+    - Request parameters
+    - Request body schema (if applicable)
+    - Response schema
+    - Status codes
+    - Example request and response
+    - Authentication requirements
+    - Error scenarios
+    
+    Format using OpenAPI/Swagger style.

@@ -1,0 +1,40 @@
+form:
+  title: "Project Status Report"
+  fields:
+    - label: "Project Name"
+      alias: "project"
+    
+    - label: "Current Sprint/Week"
+      alias: "period"
+    
+    - label: "Accomplishments"
+      alias: "done"
+    
+    - label: "In Progress"
+      alias: "wip"
+    
+    - label: "Blockers/Issues"
+      alias: "blockers"
+      default: "None"
+    
+    - label: "Next Steps"
+      alias: "next"
+
+prompt:
+  query: |
+    Create a professional status report for {project} covering {period}.
+    
+    Completed:
+    {done}
+    
+    In Progress:
+    {wip}
+    
+    Blockers:
+    {blockers}
+    
+    Planned:
+    {next}
+    
+    Search the codebase and documentation for relevant context about this project.
+    Format the report with proper structure and include any relevant metrics or links.

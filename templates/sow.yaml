@@ -1,0 +1,40 @@
+form:
+  title: "Statement of Work Generator"
+  fields:
+    - label: "Project Name"
+      alias: "project_name"
+    
+    - label: "Project Description"
+      alias: "description"
+    
+    - label: "Scope (what's included)"
+      alias: "scope"
+    
+    - label: "Out of Scope (what's excluded)"
+      alias: "out_scope"
+      default: "TBD"
+    
+    - label: "Timeline Estimate"
+      alias: "timeline"
+      default: "4 weeks"
+
+prompt:
+  query: |
+    Generate a comprehensive Statement of Work document for a software project with these details:
+    
+    Project Name: {project_name}
+    Description: {description}
+    Scope: {scope}
+    Out of Scope: {out_scope}
+    Timeline: {timeline}
+    
+    Include sections for:
+    - Project Overview
+    - Scope of Work
+    - Deliverables
+    - Timeline
+    - Technical Requirements
+    - Assumptions
+    - Success Criteria
+    
+    Format as a professional document.

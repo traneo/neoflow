@@ -1,0 +1,57 @@
+# Environment
+.env
+.env/
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Build and Distribution
+build/
+dist/
+*.egg
+*.egg-info/
+neoflow.egg-info/
+.eggs/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+
+# Type Checking and Linting
+.mypy_cache/
+.ruff_cache/
+.pytype/
+
+# Data
+screenshots/
+reports/
+debug.md
+chat_history/
+tickets/
+documentation/
+zip_files/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+.temp/

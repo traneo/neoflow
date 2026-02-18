@@ -1,0 +1,11 @@
+repositories:
+  - project_id: mygroup/example-project
+    name: "example-project"
+    ref: "master"
+    description: "Example Project - Sample repository for demonstration"
+    paths: [ ]  # empty = index all, or list specific dirs
+  - project_id: mygroup/sample-sdk
+    name: "sample-sdk"
+    ref: "master"
+    description: "Sample SDK - Example SDK for API integration"
+    paths: [ ]  # empty = index all, or list specific dirs

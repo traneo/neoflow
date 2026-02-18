@@ -1,0 +1,27 @@
+form:
+  title: "Code Review Request"
+  fields:
+    - label: "File or Module to Review"
+      alias: "target"
+    
+    - label: "Focus Areas"
+      alias: "focus"
+      default: "Code quality, security, performance"
+    
+    - label: "Specific Concerns"
+      alias: "concerns"
+      default: "None"
+
+prompt:
+  query: |
+    Perform a code review of {target}.
+    
+    Focus on: {focus}
+    Specific concerns: {concerns}
+    
+    Search the code and provide:
+    1. Overall assessment
+    2. Issues found (with severity)
+    3. Suggestions for improvement
+    4. Best practices recommendations
+    5. References to similar patterns in codebase
