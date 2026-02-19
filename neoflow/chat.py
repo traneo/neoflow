@@ -24,18 +24,21 @@ from neoflow.search.tools import (
     search_documentation,
     search_tickets,
     gitlab_live_search,
+    get_full_ticket,
 )
 from neoflow.status_bar import StatusBar, estimate_tokens, status_context
 
 logger = logging.getLogger(__name__)
 
 # Tools allowed in chat mode
-_CHAT_TOOLS = {"search_tickets", "search_code", "search_documentation", "gitlab_live_search", "done"}
+_CHAT_TOOLS = {"search_tickets", "search_code", "search_documentation", "gitlab_live_search", "get_full_ticket", "done"}
 
 _TOOL_STATUS_LABELS = {
     "search_code": "Searching code...",
     "search_documentation": "Searching documentation...",
     "gitlab_live_search": "Searching GitLab...",
+    "search_tickets": "Searching tickets...",
+    "get_full_ticket": "Retrieving full ticket details...",
 }
 
 
@@ -270,13 +273,14 @@ def _execute_chat_action(action: dict, config: Config) -> str:
             return search_tickets(
                 action["query"],
                 config,
-                limit=action.get("limit", 10),
+                limit=action.get("limit", 15),  # Increased default for better coverage
+                include_comments=action.get("include_comments", True),  # Include comments by default
             )
         elif act == "search_code":
             return search_code(
                 action["query"],
                 config,
-                limit=action.get("limit", 5),
+                limit=action.get("limit", 20),
                 repository=action.get("repository"),
                 language=action.get("language"),
                 is_test=action.get("is_test"),
@@ -286,14 +290,19 @@ def _execute_chat_action(action: dict, config: Config) -> str:
             return search_documentation(
                 action["query"],
                 config,
-                limit=action.get("limit", 5),
+                limit=action.get("limit", 20),
             )
         elif act == "gitlab_live_search":
             return gitlab_live_search(
                 action["query"],
                 config,
                 repository=action.get("repository"),
-                limit=action.get("limit", 10),
+                limit=action.get("limit", 20),
+            )
+        elif act == "get_full_ticket":
+            return get_full_ticket(
+                action["reference"],
+                config,
             )
         else:
             return f"Unknown action: {act}"

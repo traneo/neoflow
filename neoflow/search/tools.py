@@ -238,15 +238,25 @@ def search_tickets(
     query: str,
     config: Config,
     limit: int = 10,
+    include_comments: bool = True,
 ) -> str:
-    """BM25 search on the Weaviate Tickets collection, returning formatted results."""
+    """BM25 search on Tickets and optionally Comments, returning comprehensive results.
+    
+    Args:
+        query: Search query text
+        config: Configuration
+        limit: Max tickets to return (default: 10)
+        include_comments: Whether to search comments too and include in results (default: True)
+    """
     client = _weaviate_client(config)
     try:
         if not client.collections.exists("Tickets"):
             return "Tickets collection does not exist. No imported tickets available."
 
         tickets = client.collections.use("Tickets")
+        comments = client.collections.use("Comments") if client.collections.exists("Comments") else None
 
+        # Search tickets
         result = tickets.query.bm25(
             query=query,
             limit=min(limit, 20),
@@ -256,22 +266,124 @@ def search_tickets(
         if not result.objects:
             return "No matching tickets found."
 
+        # Collect unique ticket references
+        ticket_refs = set()
         parts = []
+        
         for obj in result.objects:
             props = obj.properties
             title = props.get("title", "?")
             ref = props.get("reference", "?")
             question = props.get("question", "")
             url = props.get("url", "")
+            
+            ticket_refs.add(ref)
 
             entry = f"--- {ref}: {title} ---"
             if question:
-                entry += f"\nQuestion: {question}"
+                # Truncate very long questions
+                if len(question) > 500:
+                    entry += f"\nQuestion: {question[:500]}... [truncated]"
+                else:
+                    entry += f"\nQuestion: {question}"
             if url:
                 entry += f"\nURL: {url}"
+            
+            # Fetch related comments if requested
+            if include_comments and comments:
+                comment_result = comments.query.bm25(
+                    query=query,
+                    filters=weaviate.classes.query.Filter.by_property("reference").equal(ref),
+                    limit=3,  # Top 3 most relevant comments per ticket
+                )
+                
+                if comment_result.objects:
+                    entry += "\n\nRelevant Comments:"
+                    for i, comment_obj in enumerate(comment_result.objects, 1):
+                        comment_text = comment_obj.properties.get("message", "")
+                        # Truncate long comments
+                        if len(comment_text) > 300:
+                            comment_text = comment_text[:300] + "... [truncated]"
+                        entry += f"\n  {i}. {comment_text}"
+                    entry += "\n  (Use get_full_ticket action to see complete details)"
+            
             parts.append(entry)
 
         return "\n\n".join(parts)
+    finally:
+        client.close()
+
+
+def get_full_ticket(
+    reference: str,
+    config: Config,
+) -> str:
+    """Retrieve complete ticket details including ALL comments for deep research.
+    
+    Args:
+        reference: Ticket reference ID (e.g., 'SDK-10007', 'TICKET-12345')
+        config: Configuration
+    
+    Returns:
+        Complete ticket with all comments, or error message if not found
+    """
+    client = _weaviate_client(config)
+    try:
+        if not client.collections.exists("Tickets"):
+            return "Tickets collection does not exist."
+        
+        tickets = client.collections.use("Tickets")
+        comments = client.collections.use("Comments") if client.collections.exists("Comments") else None
+        
+        # Find the ticket by reference
+        result = tickets.query.fetch_objects(
+            filters=weaviate.classes.query.Filter.by_property("reference").equal(reference),
+            limit=1,
+        )
+        
+        if not result.objects:
+            return f"Ticket '{reference}' not found. Ensure you use the exact reference ID."
+        
+        # Get ticket details
+        ticket_obj = result.objects[0]
+        props = ticket_obj.properties
+        title = props.get("title", "No title")
+        question = props.get("question", "No question")
+        url = props.get("url", "No URL")
+        
+        output = f"""╔═══════════════════════════════════════════════════════════════════
+║ FULL TICKET DETAILS: {reference}
+╠═══════════════════════════════════════════════════════════════════
+║ Title: {title}
+║ URL: {url}
+╚═══════════════════════════════════════════════════════════════════
+
+📋 QUESTION:
+{question}
+"""
+        
+        # Get ALL comments for this ticket
+        if comments:
+            comment_result = comments.query.fetch_objects(
+                filters=weaviate.classes.query.Filter.by_property("reference").equal(reference),
+                limit=100,  # Get up to 100 comments
+            )
+            
+            if comment_result.objects:
+                output += "\n" + "═" * 70 + "\n"
+                output += f"💬 COMMENTS ({len(comment_result.objects)}):\n"
+                output += "═" * 70 + "\n\n"
+                
+                for i, comment_obj in enumerate(comment_result.objects, 1):
+                    comment_text = comment_obj.properties.get("message", "")
+                    output += f"Comment {i}:\n{comment_text}\n\n{'-' * 70}\n\n"
+            else:
+                output += "\n(No comments found for this ticket)\n"
+        else:
+            output += "\n(Comments collection not available)\n"
+        
+        return output
+        
     finally:
         client.close()
 

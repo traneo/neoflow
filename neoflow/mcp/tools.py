@@ -21,6 +21,7 @@ from neoflow.search.tools import (
     search_code,
     search_documentation,
     search_tickets,
+    get_full_ticket,
 )
 from neoflow.status_bar import StatusBar
 
@@ -125,6 +126,17 @@ SEARCH_TICKETS_SCHEMA = {
         },
     },
     "required": ["query"],
+}
+
+GET_FULL_TICKET_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "reference": {
+            "type": "string",
+            "description": "The exact ticket reference ID (e.g., 'SDK-10007', 'TICKET-12345')",
+        },
+    },
+    "required": ["reference"],
 }
 
 GITLAB_LIVE_SEARCH_SCHEMA = {
@@ -278,6 +290,31 @@ def tool_search_tickets(config: Config, arguments: dict[str, Any]) -> str:
         return result
     except Exception as e:
         logger.error(f"search_tickets tool failed: {e}", exc_info=True)
+        return f"Error: {str(e)}"
+
+
+def tool_get_full_ticket(config: Config, arguments: dict[str, Any]) -> str:
+    """Execute the get_full_ticket tool - retrieve complete ticket details.
+    
+    Args:
+        config: Application configuration
+        arguments: Tool arguments (reference)
+    
+    Returns:
+        Complete ticket with all comments
+    """
+    reference = arguments["reference"]
+    
+    logger.info(f"MCP get_full_ticket: {reference}")
+    
+    try:
+        result = get_full_ticket(
+            reference=reference,
+            config=config,
+        )
+        return result
+    except Exception as e:
+        logger.error(f"get_full_ticket tool failed: {e}", exc_info=True)
         return f"Error: {str(e)}"
 
 

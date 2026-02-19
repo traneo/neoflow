@@ -17,11 +17,13 @@ from neoflow.mcp.tools import (
     SEARCH_CODE_SCHEMA,
     SEARCH_DOCUMENTATION_SCHEMA,
     SEARCH_TICKETS_SCHEMA,
+    GET_FULL_TICKET_SCHEMA,
     tool_ask_chat,
     tool_gitlab_live_search,
     tool_search_code,
     tool_search_documentation,
     tool_search_tickets,
+    tool_get_full_ticket,
 )
 
 logger = logging.getLogger(__name__)
@@ -84,10 +86,22 @@ def create_mcp_server(config: Config | None = None) -> Server:
                 name="search_tickets",
                 description=(
                     "Search support tickets, issues, and bug reports using BM25 search. "
-                    "Returns ticket titles, references, questions, and URLs. "
-                    "Use for finding known issues, bug reports, and support history."
+                    "Returns ticket titles, references, questions, URLs, and top relevant comments. "
+                    "Use for finding known issues, bug reports, and support history. "
+                    "Follow up with get_full_ticket to see complete details."
                 ),
                 inputSchema=SEARCH_TICKETS_SCHEMA,
+            ),
+            Tool(
+                name="get_full_ticket",
+                description=(
+                    "Retrieve COMPLETE ticket details including ALL comments for deep research. "
+                    "Use this after search_tickets finds relevant tickets to understand: "
+                    "how issues were resolved, workarounds and solutions, complete conversation history, "
+                    "and implementation details from discussions. "
+                    "Requires the exact ticket reference ID (e.g., 'SDK-10007')."
+                ),
+                inputSchema=GET_FULL_TICKET_SCHEMA,
             ),
             Tool(
                 name="gitlab_live_search",
@@ -131,6 +145,8 @@ def create_mcp_server(config: Config | None = None) -> Server:
                 result = tool_search_documentation(config, arguments)
             elif name == "search_tickets":
                 result = tool_search_tickets(config, arguments)
+            elif name == "get_full_ticket":
+                result = tool_get_full_ticket(config, arguments)
             elif name == "gitlab_live_search":
                 result = tool_gitlab_live_search(config, arguments)
             else:
