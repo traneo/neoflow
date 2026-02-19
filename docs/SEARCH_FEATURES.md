@@ -264,6 +264,49 @@ curl -X POST http://localhost:9720/api/v1/query \
 }
 ```
 
+### get_full_ticket
+
+Retrieve complete ticket details including ALL comments for deep research.
+
+```json
+{
+  "action": "get_full_ticket",
+  "reference": "TICKET-10234"
+}
+```
+
+**Returns:**
+```
+╔═══════════════════════════════════════════════════════════════════
+║ FULL TICKET DETAILS: TICKET-10234
+╠═══════════════════════════════════════════════════════════════════
+║ Title: Login fails with 401
+║ URL: https://support.../10234
+╚═══════════════════════════════════════════════════════════════════
+
+QUESTION:
+Users getting 401 error on login...
+
+═══════════════════════════════════════════════════════════════════
+COMMENTS (5):
+═══════════════════════════════════════════════════════════════════
+
+[Comment 1]
+Check if the JWT token has expired...
+
+[Comment 2]
+Updated the token validation logic...
+...
+```
+
+**Use Cases:**
+- Follow up on relevant tickets found via `search_tickets`
+- Deep dive into ticket conversation threads
+- Understand complete context of support issues
+- Review all comments and solutions
+
+**Note:** Always use `get_full_ticket` after finding relevant tickets to see the complete conversation and all details.
+
 ### gitlab_live_search
 
 ```json

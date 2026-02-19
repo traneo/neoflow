@@ -264,6 +264,15 @@ Search support tickets.
 }
 ```
 
+#### get_full_ticket
+Retrieve complete ticket details with all comments.
+```json
+{
+  "action": "get_full_ticket",
+  "reference": "SDK-10007"
+}
+```
+
 ### Shell Operations
 
 #### run_command

@@ -31,11 +31,12 @@ NeoFlow implements MCP to expose its search capabilities as tools that AI assist
 
 ## Features
 
-✅ **5 Powerful Tools**
+✅ **6 Powerful Tools**
 - `ask_chat` - Conversational AI with comprehensive search (⭐ Recommended)
 - `search_code` - Indexed code search with filters
 - `search_documentation` - Documentation search
 - `search_tickets` - Ticket/issue search
+- `get_full_ticket` - Retrieve complete ticket details with all comments
 - `gitlab_live_search` - Real-time GitLab API search
 
 ✅ **Universal Integration**
@@ -268,9 +269,35 @@ How does authentication work in this project? Show me the implementation.
 }
 ```
 
+**Note:** Use `get_full_ticket` to retrieve complete details after finding relevant tickets.
+
 ---
 
-### 5. gitlab_live_search
+### 5. get_full_ticket
+
+**Description:** Retrieve complete ticket details including ALL comments for deep research.
+
+**When to use:**
+- Following up on relevant tickets found via `search_tickets`
+- Need to see complete conversation thread
+- Understanding full context of support issues
+- Reviewing all comments and solutions
+
+**Parameters:**
+- `reference` (string, required): Ticket reference ID (e.g., 'SDK-10007', 'TICKET-12345')
+
+**Example:**
+```json
+{
+  "reference": "SDK-10007"
+}
+```
+
+**Response:** Complete ticket with title, URL, full question, and all comments in chronological order.
+
+---
+
+### 6. gitlab_live_search
 
 **Description:** Real-time search on GitLab repositories via API (not indexed).
 

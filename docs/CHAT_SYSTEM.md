@@ -246,7 +246,29 @@ Search support tickets and comments.
 }
 ```
 
-### 4. gitlab_live_search
+### 4. get_full_ticket
+
+Retrieve complete ticket details including ALL comments.
+
+```json
+{
+  "action": "get_full_ticket",
+  "reference": "TICKET-10234"
+}
+```
+
+**Parameters:**
+- `reference`: Ticket reference ID (e.g., 'SDK-10007', 'TICKET-12345')
+
+**Returns:**
+- Complete ticket details with title and URL
+- Full question/description
+- All comments in chronological order
+- Formatted output for easy reading
+
+**Usage:** Always use this after finding relevant tickets via `search_tickets` to see the complete conversation and context.
+
+### 5. gitlab_live_search
 
 Search GitLab repositories directly (not indexed).
 
@@ -259,7 +281,7 @@ Search GitLab repositories directly (not indexed).
 }
 ```
 
-### 5. done
+### 6. done
 
 Signal completion with final answer.
 

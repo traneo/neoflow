@@ -32,7 +32,13 @@ Search support tickets, issues, and bug reports.
 - BM25 search across tickets
 - Returns ticket titles, references, and URLs
 
-### 5. gitlab_live_search
+### 5. get_full_ticket
+Retrieve complete ticket details including ALL comments.
+- Get full ticket with all comments for deep research
+- Use after finding relevant tickets via search_tickets
+- Returns complete conversation thread
+
+### 6. gitlab_live_search
 Real-time search on GitLab repositories via API.
 - Live search (not indexed)
 - Access latest code from GitLab
