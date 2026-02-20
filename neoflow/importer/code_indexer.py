@@ -264,11 +264,103 @@ def _ensure_code_snippets_collection(client, config: Config):
         _create_code_snippets_collection(client, config)
 
 
+def _collect_code_files(root: str) -> list[str]:
+    files: list[str] = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [dirname for dirname in dirnames if not _should_skip_dir(dirname)]
+
+        for filename in filenames:
+            rel_path = os.path.relpath(os.path.join(dirpath, filename), root)
+            if _is_code_file(rel_path):
+                files.append(os.path.join(dirpath, filename))
+    return files
+
+
+def _index_code_from_root(root: str, repo_name: str, source_label: str, config: Config):
+    max_size = config.importer.max_file_size_bytes
+    files = _collect_code_files(root)
+
+    logger.info("Found %d code files in %s", len(files), source_label)
+
+    with _connect_weaviate(config) as weaviate_client:
+        _ensure_code_snippets_collection(weaviate_client, config)
+        collection = weaviate_client.collections.use("CodeSnippets")
+
+        indexed = 0
+        skipped = 0
+
+        for full_path in files:
+            rel_path = os.path.relpath(full_path, root)
+
+            try:
+                with open(full_path, "r", encoding="utf-8", errors="replace") as file:
+                    content = file.read()
+            except Exception as exc:
+                logger.warning("Failed to read %s: %s", rel_path, exc)
+                skipped += 1
+                continue
+
+            if len(content.encode("utf-8", errors="replace")) > max_size:
+                logger.debug("Skipping oversized file: %s", rel_path)
+                skipped += 1
+                continue
+
+            language = _detect_language(rel_path)
+            is_test = _is_test_file(rel_path)
+            file_name = os.path.basename(rel_path)
+            directory = os.path.dirname(rel_path) or "."
+            imports = _extract_imports(content)
+            definitions = _extract_definitions(content)
+
+            chunks = chunk_content(content, config.llm_provider.chunk_size_bytes)
+            total_chunks = len(chunks)
+            line_ranges = _compute_line_ranges(content, chunks)
+
+            for chunk_idx, chunk in enumerate(chunks):
+                line_start, line_end = line_ranges[chunk_idx]
+                chunk_definitions = _extract_definitions(chunk)
+
+                try:
+                    collection.data.insert(
+                        properties={
+                            "repository": repo_name,
+                            "file_path": rel_path,
+                            "file_name": file_name,
+                            "directory": directory,
+                            "content": chunk,
+                            "language": language,
+                            "is_test": is_test,
+                            "chunk_index": chunk_idx,
+                            "total_chunks": total_chunks,
+                            "line_start": line_start,
+                            "line_end": line_end,
+                            "imports": "\n".join(imports) if imports else "",
+                            "definitions": ", ".join(chunk_definitions) if chunk_definitions else "",
+                        }
+                    )
+                    indexed += 1
+                except Exception as exc:
+                    logger.warning(
+                        "Failed to index chunk %d/%d of %s: %s",
+                        chunk_idx + 1,
+                        total_chunks,
+                        rel_path,
+                        exc,
+                    )
+                    skipped += 1
+
+    logger.info(
+        "Code import %s from %s: indexed %d chunks, %d skipped",
+        repo_name,
+        source_label,
+        indexed,
+        skipped,
+    )
+
+
 def index_zip_file(zip_path: str, repo_name: str, config: Config):
     if not zipfile.is_zipfile(zip_path):
         raise ValueError(f"Not a valid zip file: {zip_path}")
-
-    max_size = config.importer.max_file_size_bytes
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         with zipfile.ZipFile(zip_path, "r") as archive:
@@ -280,87 +372,9 @@ def index_zip_file(zip_path: str, repo_name: str, config: Config):
         else:
             root = tmp_dir
 
-        files: list[str] = []
-        for dirpath, dirnames, filenames in os.walk(root):
-            dirnames[:] = [dirname for dirname in dirnames if not _should_skip_dir(dirname)]
+        _index_code_from_root(root, repo_name, zip_path, config)
 
-            for filename in filenames:
-                rel_path = os.path.relpath(os.path.join(dirpath, filename), root)
-                if _is_code_file(rel_path):
-                    files.append(os.path.join(dirpath, filename))
 
-        logger.info("Found %d code files in %s", len(files), zip_path)
-
-        with _connect_weaviate(config) as weaviate_client:
-            _ensure_code_snippets_collection(weaviate_client, config)
-            collection = weaviate_client.collections.use("CodeSnippets")
-
-            indexed = 0
-            skipped = 0
-
-            for full_path in files:
-                rel_path = os.path.relpath(full_path, root)
-
-                try:
-                    with open(full_path, "r", encoding="utf-8", errors="replace") as file:
-                        content = file.read()
-                except Exception as exc:
-                    logger.warning("Failed to read %s: %s", rel_path, exc)
-                    skipped += 1
-                    continue
-
-                if len(content.encode("utf-8", errors="replace")) > max_size:
-                    logger.debug("Skipping oversized file: %s", rel_path)
-                    skipped += 1
-                    continue
-
-                language = _detect_language(rel_path)
-                is_test = _is_test_file(rel_path)
-                file_name = os.path.basename(rel_path)
-                directory = os.path.dirname(rel_path) or "."
-                imports = _extract_imports(content)
-                definitions = _extract_definitions(content)
-
-                chunks = chunk_content(content, config.llm_provider.chunk_size_bytes)
-                total_chunks = len(chunks)
-                line_ranges = _compute_line_ranges(content, chunks)
-
-                for chunk_idx, chunk in enumerate(chunks):
-                    line_start, line_end = line_ranges[chunk_idx]
-                    chunk_definitions = _extract_definitions(chunk)
-
-                    try:
-                        collection.data.insert(
-                            properties={
-                                "repository": repo_name,
-                                "file_path": rel_path,
-                                "file_name": file_name,
-                                "directory": directory,
-                                "content": chunk,
-                                "language": language,
-                                "is_test": is_test,
-                                "chunk_index": chunk_idx,
-                                "total_chunks": total_chunks,
-                                "line_start": line_start,
-                                "line_end": line_end,
-                                "imports": "\n".join(imports) if imports else "",
-                                "definitions": ", ".join(chunk_definitions) if chunk_definitions else "",
-                            }
-                        )
-                        indexed += 1
-                    except Exception as exc:
-                        logger.warning(
-                            "Failed to index chunk %d/%d of %s: %s",
-                            chunk_idx + 1,
-                            total_chunks,
-                            rel_path,
-                            exc,
-                        )
-                        skipped += 1
-
-    logger.info(
-        "Zip import %s: indexed %d chunks, %d skipped",
-        repo_name,
-        indexed,
-        skipped,
-    )
+def index_source_folder(source_path: str, repo_name: str, config: Config):
+    root = os.path.abspath(source_path)
+    _index_code_from_root(root, repo_name, root, config)

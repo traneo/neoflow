@@ -119,8 +119,8 @@ def _save_report(content: str, name: str):
 
 def cmd_import(args, config: Config):
     """Import tickets, documentation, or zip code into Weaviate."""
-    if getattr(args, "name", None) and not getattr(args, "zip", None):
-        console.print("[red bold]--name requires --zip.[/red bold]")
+    if getattr(args, "name", None) and not (getattr(args, "zip", None) or getattr(args, "source", None)):
+        console.print("[red bold]--name requires --zip or --source.[/red bold]")
         sys.exit(1)
 
     if getattr(args, "docs", None):
@@ -134,6 +134,14 @@ def cmd_import(args, config: Config):
             sys.exit(1)
         args.file = args.zip
         cmd_import_zip(args, config)
+        return
+
+    if getattr(args, "source", None):
+        if not getattr(args, "name", None):
+            console.print("[red bold]--source requires --name.[/red bold]")
+            sys.exit(1)
+        args.path = args.source
+        cmd_import_source(args, config)
         return
 
     if getattr(args, "tickets", False):
@@ -181,6 +189,26 @@ def cmd_import_zip(args, config: Config):
         index_zip_file(zip_path, repo_name, config)
 
     console.print(f"[green]Zip import complete: {repo_name}[/green]")
+
+
+def cmd_import_source(args, config: Config):
+    """Import code from a source folder into the CodeSnippets collection."""
+    from neoflow.importer.code_indexer import index_source_folder
+
+    _check_services(config)
+
+    source_path = args.path
+    if not os.path.isdir(source_path):
+        console.print(f"[red bold]Directory not found: {source_path}[/red bold]")
+        sys.exit(1)
+
+    repo_name = args.name
+    console.print(f"Importing source from [cyan]{source_path}[/cyan] as [cyan]{repo_name}[/cyan]...")
+
+    with console.status("[bold green]Indexing code from source folder..."):
+        index_source_folder(source_path, repo_name, config)
+
+    console.print(f"[green]Source import complete: {repo_name}[/green]")
 
 
 def cmd_config(args, config: Config):
@@ -598,7 +626,7 @@ def main():
     # import
     import_parser = subparsers.add_parser(
         "import",
-        help="Import tickets, docs, or zip code into Weaviate",
+        help="Import tickets, docs, zip code, or source folder code into Weaviate",
     )
     mode_group = import_parser.add_mutually_exclusive_group(required=True)
     mode_group.add_argument(
@@ -613,9 +641,13 @@ def main():
         "--zip", type=str, default=None,
         help="Path to zip file to import as code",
     )
+    mode_group.add_argument(
+        "--source", nargs="?", const=".", default=None,
+        help="Path to source folder to import as code (defaults to current directory)",
+    )
     import_parser.add_argument(
         "--name", type=str, default=None,
-        help="Repository name label (required with --zip)",
+        help="Repository name label (required with --zip or --source)",
     )
 
     # config

@@ -234,7 +234,8 @@ neoflow import [OPTIONS]
 | `--tickets` | Import ticket data |
 | `--docs <path>` | Import documentation files from a directory |
 | `--zip <file>` | Import code from a zip archive |
-| `--name <repo>` | Repository label for zip import (required with `--zip`) |
+| `--source [path]` | Import code from a source folder (defaults to current directory if omitted) |
+| `--name <repo>` | Repository label for code import (required with `--zip` or `--source`) |
 
 **Example:**
 ```bash
@@ -246,6 +247,12 @@ neoflow import --docs ./docs
 
 # Import code zip
 neoflow import --zip ./repo.zip --name my-repo
+
+# Import current folder source code
+neoflow import --source --name my-repo
+
+# Import source code from a specific folder
+neoflow import --source ./path/to/repo --name my-repo
 ```
 
 **Ticket Format:**
