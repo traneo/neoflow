@@ -80,6 +80,7 @@ The Agent System provides autonomous, multi-step task execution with planning ca
 │  - Search (code, docs, tickets)                        │
 │  - Shell Commands                                       │
 │  - Ask Chat (delegate to chat system)                  │
+│  - Ask User (clarifications and decisions)              │
 │  - Task Management (resolve, switch)                   │
 │  - Agent Notebook (search, add, remove)                │
 └────────────────────────────────────────────────────────┘
@@ -294,6 +295,18 @@ Delegate question to chat system.
   "question": "What are the best practices for error handling?"
 }
 ```
+
+#### ask_user
+Ask the human user for clarification, missing information, or conflict resolution.
+```json
+{
+  "action": "ask_user",
+  "question": "Which branch should I target for this fix?",
+  "options": ["main", "release/1.4"],
+  "allow_freeform": true
+}
+```
+When this action is used, the agent pauses, presents the question and options, captures the user response, adds it to context, and resumes the loop.
 
 ### Task Management
 

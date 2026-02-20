@@ -10,6 +10,10 @@ class QueryRequest(BaseModel):
     query: str = Field(..., description="The search query", min_length=1)
     project_keyword: str = Field(default="", description="Project name or keyword to filter by")
     include_code: bool = Field(default=False, description="Include code search results")
+    include_system_prompt: bool = Field(
+        default=True,
+        description="Include NeoFlow system prompt when generating the answer",
+    )
 
 
 class SessionCreateRequest(BaseModel):

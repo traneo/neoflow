@@ -52,19 +52,26 @@ Use this exact flow for each task:
    Use CLI-capable browser automation when available (e.g., Playwright via Python/Node scripts run from command line).
    - Render the page.
    - Wait for network/content readiness.
+   - Inspect network calls (XHR/fetch) made by the page to identify underlying data endpoints.
    - Extract visible text, important DOM sections, and page metadata.
    - Save artifacts when useful (`rendered.html`, `screenshot.png`, JSON extraction files).
 
-6. **Extract structured evidence**
+6. **Trace backing data sources**
+   - From dynamic render artifacts, collect candidate API/data URLs used by the page.
+   - Retry those endpoints with compliant, unauthenticated requests first.
+   - Record status codes, redirect chains, and auth requirements (`401/403`, token/cookie dependency).
+   - Prefer official machine-readable sources (CSV/JSON/XML/download endpoints) if exposed.
+
+7. **Extract structured evidence**
    - Prefer high-signal content only: headings, paragraphs, tables, lists, code blocks, and metadata.
    - Remove navigation, footer, cookie banners, and repeated boilerplate.
    - Normalize whitespace and preserve units, dates, and exact wording where needed.
 
-7. **Cross-check and validate**
+8. **Cross-check and validate**
    - Verify critical claims against at least one additional authoritative page when possible.
    - If conflicting info exists, report conflict clearly and prefer official/latest source.
 
-8. **Answer the user question**
+9. **Answer the user question**
    - Provide direct answer first.
    - Include concise supporting evidence with source URLs.
    - Explicitly mention uncertainty when evidence is incomplete.
@@ -87,6 +94,7 @@ When static fetch is insufficient, run a CLI script that:
   - canonical URL
   - main content text
   - key sections/tables
+   - network request log for data endpoints (URL, method, status, content type)
   - links used for follow-up
 - Writes extracted content to a local JSON file for reproducibility.
 
@@ -116,6 +124,25 @@ Do **not** attempt to bypass security controls.
    - provide allowed authenticated cookies/headers from user session,
    - use official API,
    - provide page export/HTML/PDF for offline extraction.
+
+## Public-UI but Programmatic-Access Gap (Mandatory)
+
+Use this when data is visible on the website but not retrievable via static HTML or unauthenticated API calls.
+
+1. State this explicitly:
+   - The data appears publicly in the browser UI.
+   - Static fetch (`curl`) and unauthenticated endpoint calls do not return the required data.
+   - Data loading depends on JavaScript runtime and/or authenticated request context.
+2. Include concrete evidence:
+   - Page URL, final URL, and HTTP status from static fetch.
+   - Dynamic render result (what was visible).
+   - Endpoint attempts with status codes and why they failed (e.g., `401/403`, missing token/cookie).
+3. Provide compliant recovery paths:
+   - Official downloadable dataset/feed/API (if available).
+   - User-provided authenticated session material (only if permitted).
+   - User-provided export file (CSV/JSON/XLSX/PDF) for offline extraction.
+4. Use this exact conclusion sentence when applicable:
+   - **Conclusion**: The data is publicly displayed on the website, but it is not accessible programmatically through the provided tools (static HTML fetch or unauthenticated API calls) due to authentication requirements and JavaScript-based content loading.
 
 ## Output Format
 

@@ -23,6 +23,7 @@ class StatusState:
     start_time: float = field(default_factory=time.time)
     message_count: int = 0
     token_count: int = 0
+    token_rate: float = 0.0
     last_action: str = ""
     is_loading: bool = False
     # Task list: list of (description, status) where status is "pending" / "in_progress" / "done"
@@ -127,6 +128,10 @@ class StatusBar:
     def add_tokens(self, tokens: int) -> None:
         with self._lock:
             self._state.token_count += tokens
+
+    def set_token_rate(self, tokens_per_second: float) -> None:
+        with self._lock:
+            self._state.token_rate = max(0.0, tokens_per_second)
 
     # -- Public API: task list -----------------------------------------------
 
@@ -264,6 +269,7 @@ class StatusBar:
                 start_time=self._state.start_time,
                 message_count=self._state.message_count,
                 token_count=self._state.token_count,
+                token_rate=self._state.token_rate,
                 last_action=self._state.last_action,
                 is_loading=self._state.is_loading,
                 tasks=list(self._state.tasks),
@@ -298,6 +304,8 @@ class StatusBar:
         parts.append(f"\033[33mmsgs: {state.message_count}\033[0m")
         token_str = _format_tokens(state.token_count)
         parts.append(f"\033[33mtokens: ~{token_str}\033[0m")
+        if state.token_rate > 0:
+            parts.append(f"\033[33mtok/s: {state.token_rate:.1f}\033[0m")
         if state.last_action:
             parts.append(f"\033[34mlast: {state.last_action}\033[0m")
 

@@ -46,6 +46,7 @@ def run_chat(
     console: Console,
     bar: StatusBar,
     silent: bool = False,
+    include_system_prompt: bool = True,
 ) -> str | None:
     """Run a tool-based chat loop and return the final answer (or None).
 
@@ -53,16 +54,17 @@ def run_chat(
     delegates a question via ``ask_chat``).  Status bar updates still occur.
     """
     max_iterations = config.chat.max_iterations
-    system_prompt = get_chat_system_prompt(config, max_iterations)
+    system_prompt = get_chat_system_prompt(config, max_iterations) if include_system_prompt else None
 
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": query},
-    ]
+    messages = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.append({"role": "user", "content": query})
 
     bar.set_message("Chat started")
-    bar.increment_messages(2)
-    bar.add_tokens(estimate_tokens(system_prompt))
+    bar.increment_messages(2 if system_prompt else 1)
+    if system_prompt:
+        bar.add_tokens(estimate_tokens(system_prompt))
     bar.add_tokens(estimate_tokens(query))
 
     optimizer = ContextOptimizer(config, bar)

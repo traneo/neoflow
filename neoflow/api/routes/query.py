@@ -31,6 +31,7 @@ async def execute_query(
     - **query**: The search query text
     - **project_keyword**: Optional project name or keyword to filter results
     - **include_code**: Whether to include code search results
+    - **include_system_prompt**: Whether to include NeoFlow's system prompt
 
     **Returns:**
     - The generated answer in markdown format
@@ -55,6 +56,10 @@ async def execute_query(
             query_text = request.query
             if request.project_keyword:
                 query_text = f"[project: {request.project_keyword}] {request.query}"
+
+            effective_include_system_prompt = request.include_system_prompt
+            if config.server.enforce_system_prompt:
+                effective_include_system_prompt = True
             
             answer = run_chat(
                 query=query_text,
@@ -62,6 +67,7 @@ async def execute_query(
                 console=console,
                 bar=bar,
                 silent=True,
+                include_system_prompt=effective_include_system_prompt,
             )
             answer = answer or "No answer generated"
         finally:

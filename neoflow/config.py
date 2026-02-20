@@ -70,6 +70,7 @@ class ServerConfig:
     cors_origins: list[str] = field(default_factory=lambda: ["*"])
     session_ttl_minutes: int = 60
     max_sessions: int = 100
+    enforce_system_prompt: bool = True
 
 
 @dataclass
@@ -148,6 +149,7 @@ CHAT_MAX_ITERATIONS=25
 # -----------------------
 SERVER_HOST=localhost
 SERVER_PORT=9720
+SERVER_ENFORCE_SYSTEM_PROMPT=true
 
 # -----------------------
 # MCP Server Configuration
@@ -241,6 +243,9 @@ CHUNK_SIZE_BYTES=2000
         ))
         config.server.host = os.getenv("SERVER_HOST", config.server.host)
         config.server.port = int(os.getenv("SERVER_PORT", config.server.port))
+        config.server.enforce_system_prompt = os.getenv(
+            "SERVER_ENFORCE_SYSTEM_PROMPT", "true"
+        ).lower() in ("true", "1", "yes")
         
         # MCP configuration
         config.mcp.enabled = os.getenv(

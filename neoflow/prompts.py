@@ -109,6 +109,16 @@ Delegate complex research questions to the chat assistant. It searches tickets, 
 ```
 **Use when:** You need comprehensive research across multiple data sources or domain knowledge.
 
+### ask_user
+Ask the human user for missing information, decisions, or conflict resolution.
+```json
+{"action": "ask_user", "question": "Which environment should I target?", "options": ["staging", "production"], "allow_freeform": true}
+```
+**Use when:** Requirements are ambiguous, information is missing, or two valid options conflict and user input is needed.
+**Optional fields:**
+- `options`: list of suggested answer choices
+- `allow_freeform`: whether user can provide a custom answer (default: `true`)
+
 ## Execution
 
 ### run_command
@@ -117,6 +127,10 @@ Execute a shell command and capture output (30-second timeout).
 {"action": "run_command", "command": "python -m pytest tests/"}
 ```
 **Safety:** Never run destructive commands (rm -rf, system modifications). Use non-interactive modes for CLI tools.
+
+### Forbidden file-tool actions
+Do not emit `read_file`, `write_file`, `edit_file`, or any non-listed tool action. These actions are not available in this runtime.
+If you need to inspect files, use `run_command` with read-only commands such as `sed -n`, `head`, `tail`, `cat`, or `grep`.
 
 ## Agent Notebook
 

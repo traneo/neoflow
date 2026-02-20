@@ -3,6 +3,7 @@
 import re
 import sys
 import threading
+import time
 from concurrent.futures import Future
 
 from prompt_toolkit import PromptSession
@@ -12,6 +13,7 @@ from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit.key_binding import KeyBindings
 
 from neoflow.agent.domains import list_domains
+from neoflow.status_bar import estimate_tokens
 
 _MENTION_PATTERN = re.compile(r"@\w*")
 
@@ -160,6 +162,7 @@ def run_llm_with_cancel(llm_fn, status_bar=None):
 
     thread = threading.Thread(target=_target, daemon=True)
     thread.start()
+    started_at = time.time()
 
     frame_idx = 0
     try:
@@ -173,6 +176,11 @@ def run_llm_with_cancel(llm_fn, status_bar=None):
 
             try:
                 result = future.result(timeout=0.15)
+                elapsed = max(time.time() - started_at, 0.001)
+                if status_bar is not None:
+                    completion_tokens = _extract_completion_tokens(result)
+                    status_bar.add_tokens(completion_tokens)
+                    status_bar.set_token_rate(completion_tokens / elapsed)
                 if status_bar is None:
                     # Clear the spinner line before returning
                     sys.stdout.write(f"\r{' ' * (len(_LABEL) + 4)}\r")
@@ -185,3 +193,34 @@ def run_llm_with_cancel(llm_fn, status_bar=None):
             sys.stdout.write(f"\r{' ' * (len(_LABEL) + 4)}\r")
             sys.stdout.flush()
         raise AgentCancelled()
+
+
+def _extract_completion_tokens(response) -> int:
+    """Best-effort extraction of completion token count from provider responses."""
+    if not isinstance(response, dict):
+        return 0
+
+    usage = response.get("usage")
+    if isinstance(usage, dict):
+        for key in ("completion_tokens", "output_tokens", "eval_count"):
+            value = usage.get(key)
+            if isinstance(value, (int, float)) and value > 0:
+                return int(value)
+
+    for key in ("completion_tokens", "output_tokens", "eval_count"):
+        value = response.get(key)
+        if isinstance(value, (int, float)) and value > 0:
+            return int(value)
+
+    content = ""
+    if "choices" in response and response["choices"]:
+        choice = response["choices"][0]
+        if isinstance(choice, dict):
+            if isinstance(choice.get("message"), dict):
+                content = choice["message"].get("content", "") or ""
+            elif isinstance(choice.get("text"), str):
+                content = choice["text"]
+    elif isinstance(response.get("message"), dict):
+        content = response["message"].get("content", "") or ""
+
+    return estimate_tokens(content)

@@ -31,6 +31,20 @@ from neoflow.status_bar import StatusBar, estimate_tokens, status_context
 
 logger = logging.getLogger(__name__)
 
+# Tools allowed in agent mode
+_AGENT_TOOLS = {
+    "run_command",
+    "search_code",
+    "search_documentation",
+    "search_tickets",
+    "ask_chat",
+    "ask_user",
+    "notebook_search",
+    "notebook_add",
+    "notebook_remove",
+    "done",
+}
+
 
 def run_agent(task: str, config: Config, console: Console, bar: StatusBar | None = None):
     """Run the agentic loop for a given task description."""
@@ -274,6 +288,27 @@ def _agent_step(messages: list[dict], config: Config, console: Console, status_b
         ))
         raise _AgentDone(summary)  # Pass summary for task resolution tracking
 
+    # Validate tool is allowed
+    if act_name not in _AGENT_TOOLS:
+        available = ", ".join(sorted(_AGENT_TOOLS - {"done"}))
+        if act_name == "read_file":
+            reject_msg = (
+                "Action 'read_file' is not available in this agent runtime and must not be used. "
+                "To inspect files, use 'run_command' with safe read-only commands (for example: "
+                "sed -n '1,120p path/to/file.py', head, tail, cat, or grep). "
+                f"Available actions: {available}, done."
+            )
+        else:
+            reject_msg = (
+                f"Action '{act_name}' is not available. "
+                f"Available actions: {available}, done. "
+                "Please choose one of the available actions."
+            )
+        optimizer.add_message(messages, {"role": "user", "content": reject_msg})
+        optimizer.optimize(messages)
+        status_bar.increment_messages()
+        return
+
     # Display the proposed action (compact single line)
     action_display = _format_action(action)
     console.print(action_display)
@@ -350,11 +385,12 @@ def _agent_step(messages: list[dict], config: Config, console: Console, status_b
 
 
 _ACTION_ICONS = {
-    "run_command": "⚡",
+    "run_command": "💻",
     "search_code": "🔎",
     "search_documentation": "📚",
     "search_tickets": "🎫",
     "ask_chat": "💬",
+    "ask_user": "🙋",
     "notebook_search": "🔖",
     "notebook_add": "📝",
     "notebook_remove": "🗑️",
@@ -367,6 +403,7 @@ _ACTION_LABELS = {
     "search_documentation": "Search Documentation",
     "search_tickets": "Search Tickets",
     "ask_chat": "Ask Chat",
+    "ask_user": "Ask User",
     "notebook_search": "Notebook Search",
     "notebook_add": "Notebook Add",
     "notebook_remove": "Notebook Remove",
@@ -532,6 +569,13 @@ def _execute_action(action: dict, config: Config, console: Console | None = None
             from neoflow.chat import run_chat
             answer = run_chat(action["query"], config, console, status_bar, silent=True)
             return answer or "Chat could not produce an answer."
+        elif act == "ask_user":
+            return _ask_user(
+                question=action["question"],
+                options=action.get("options"),
+                allow_freeform=action.get("allow_freeform", True),
+                console=console,
+            )
         elif act == "notebook_search":
             return _notebook_search(action["query"])
         elif act == "notebook_add":
@@ -562,6 +606,55 @@ def _run_command(command: str) -> str:
     if result.returncode != 0:
         output += f"\n(exit code: {result.returncode})"
     return output or "(no output)"
+
+
+def _ask_user(
+    question: str,
+    options: list[str] | None = None,
+    allow_freeform: bool = True,
+    console: Console | None = None,
+) -> str:
+    """Prompt the user for clarification/help and return the captured response."""
+    normalized_options = [str(opt) for opt in (options or []) if str(opt).strip()]
+
+    if console is not None:
+        body = f"[bold]{question}[/bold]"
+        if normalized_options:
+            option_lines = [f"[{idx}] {opt}" for idx, opt in enumerate(normalized_options, 1)]
+            body += "\n\n" + "\n".join(option_lines)
+            if allow_freeform:
+                body += "\n[f] Enter a custom response"
+        console.print()
+        console.print(Panel(body, title="Agent Needs User Input", border_style="cyan"))
+
+    if normalized_options:
+        choices = [str(idx) for idx in range(1, len(normalized_options) + 1)]
+        default_choice = choices[0] if choices else ""
+        if allow_freeform:
+            choices.append("f")
+
+        selection = agent_prompt(
+            "Choose an option",
+            choices=choices,
+            default=default_choice,
+        )
+
+        if selection == "f":
+            response = agent_prompt("Your response")
+            response_type = "freeform"
+        else:
+            response = normalized_options[int(selection) - 1]
+            response_type = f"option_{selection}"
+    else:
+        response = agent_prompt("Your response")
+        response_type = "freeform"
+
+    return (
+        "User response received.\n"
+        f"Question: {question}\n"
+        f"Response type: {response_type}\n"
+        f"Response: {response}"
+    )
 
 
 

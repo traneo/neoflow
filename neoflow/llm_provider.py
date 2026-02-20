@@ -119,6 +119,11 @@ class OllamaProvider(LLMProvider):
                 data = response.json()
                 
                 # Normalize response to match OpenAI format
+                usage = {
+                    "prompt_tokens": data.get("prompt_eval_count", 0),
+                    "completion_tokens": data.get("eval_count", 0),
+                }
+                usage["total_tokens"] = usage["prompt_tokens"] + usage["completion_tokens"]
                 return {
                     "choices": [
                         {
@@ -129,6 +134,7 @@ class OllamaProvider(LLMProvider):
                         }
                     ],
                     "model": model,
+                    "usage": usage,
                 }
         except requests.exceptions.Timeout as e:
             logger.error(f"Ollama chat completion timeout: {e}")
@@ -260,6 +266,11 @@ class OpenAIProvider(LLMProvider):
                     }
                 ],
                 "model": model,
+                "usage": {
+                    "prompt_tokens": getattr(response.usage, "prompt_tokens", 0) if getattr(response, "usage", None) else 0,
+                    "completion_tokens": getattr(response.usage, "completion_tokens", 0) if getattr(response, "usage", None) else 0,
+                    "total_tokens": getattr(response.usage, "total_tokens", 0) if getattr(response, "usage", None) else 0,
+                },
             }
         except openai.APITimeoutError as e:
             logger.error(f"OpenAI chat completion timeout: {e}")

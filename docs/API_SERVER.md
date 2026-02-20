@@ -91,9 +91,13 @@ Execute single query without session.
 ```json
 {
   "query": "How do I implement JWT authentication?",
-  "max_iterations": 25
+  "project_keyword": "auth-service",
+  "include_code": true,
+  "include_system_prompt": true
 }
 ```
+
+- `include_system_prompt` (optional, default: `true`): when `false`, sends only the user query to chat without NeoFlow's system prompt.
 
 **Response:**
 ```json
