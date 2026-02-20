@@ -1,18 +1,23 @@
 """Domain-specific prompt loading via @mentions."""
 
-import os
 import re
 from pathlib import Path
 
-_DOMAIN_DIR = Path(__file__).resolve().parent.parent / "agent_system_prompt"
+from neoflow.init import bootstrap_user_resource_folders, get_neoflow_agent_system_prompt_dir
+
+
+def _domain_dir() -> Path:
+    bootstrap_user_resource_folders()
+    return get_neoflow_agent_system_prompt_dir()
 
 
 def list_domains() -> list[str]:
     """Return available domain names (filenames without .md extension)."""
-    if not _DOMAIN_DIR.is_dir():
+    domain_dir = _domain_dir()
+    if not domain_dir.is_dir():
         return []
     return sorted(
-        p.stem for p in _DOMAIN_DIR.iterdir() if p.suffix == ".md" and p.is_file()
+        p.stem for p in domain_dir.iterdir() if p.suffix == ".md" and p.is_file()
     )
 
 
@@ -22,9 +27,10 @@ def load_domains(names: list[str]) -> str:
     Returns the combined string to append to the base system prompt.
     Unknown domain names are silently skipped.
     """
+    domain_dir = _domain_dir()
     parts = []
     for name in names:
-        path = _DOMAIN_DIR / f"{name}.md"
+        path = domain_dir / f"{name}.md"
         if path.is_file():
             parts.append(path.read_text())
     return "\n\n".join(parts)

@@ -8,6 +8,8 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
 
+from neoflow.init import bootstrap_user_resource_folders, get_neoflow_templates_dir
+
 
 class TemplateError(Exception):
     """Raised when a template is missing or invalid."""
@@ -21,7 +23,14 @@ class TemplateInfo:
     fields: list[str]
 
 
-def load_template(name: str, templates_dir: str = "templates") -> dict:
+def _resolve_templates_dir(templates_dir: str | None = None) -> str:
+    if templates_dir:
+        return templates_dir
+    bootstrap_user_resource_folders()
+    return str(get_neoflow_templates_dir())
+
+
+def load_template(name: str, templates_dir: str | None = None) -> dict:
     """Load and validate a YAML template by name.
 
     Parameters
@@ -36,6 +45,7 @@ def load_template(name: str, templates_dir: str = "templates") -> dict:
     dict
         Parsed template with ``form`` and ``prompt`` sections.
     """
+    templates_dir = _resolve_templates_dir(templates_dir)
     path = os.path.join(templates_dir, f"{name}.yaml")
 
     if not os.path.isfile(path):
@@ -75,7 +85,7 @@ def load_template(name: str, templates_dir: str = "templates") -> dict:
     return data
 
 
-def list_templates(templates_dir: str = "templates") -> list[TemplateInfo]:
+def list_templates(templates_dir: str | None = None) -> list[TemplateInfo]:
     """List all available templates in the templates directory.
 
     Parameters
@@ -88,6 +98,7 @@ def list_templates(templates_dir: str = "templates") -> list[TemplateInfo]:
     list[TemplateInfo]
         List of available templates with their metadata.
     """
+    templates_dir = _resolve_templates_dir(templates_dir)
     if not os.path.isdir(templates_dir):
         return []
     

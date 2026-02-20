@@ -1,10 +1,14 @@
-"""Scaffold a .neoflow/ project configuration directory."""
+"""Scaffold and manage NeoFlow configuration directories."""
 
 import os
+import shutil
+from pathlib import Path
 
 from rich.console import Console
 
 NEOFLOW_DIR = ".neoflow"
+AGENT_SYSTEM_PROMPT_DIR = "agent_system_prompt"
+TEMPLATES_DIR = "templates"
 
 _TEMPLATES: dict[str, str] = {
     "agent_system_prompt.md": (
@@ -77,6 +81,62 @@ _TEMPLATES: dict[str, str] = {
         "  agent notes across team members.\n"
     ),
 }
+
+
+def get_neoflow_home_path() -> Path:
+    """Return the absolute path to the user-level NeoFlow directory."""
+    return Path.home() / NEOFLOW_DIR
+
+
+def get_neoflow_agent_system_prompt_dir() -> Path:
+    """Return the user-level directory containing agent domain prompt files."""
+    return get_neoflow_home_path() / AGENT_SYSTEM_PROMPT_DIR
+
+
+def get_neoflow_templates_dir() -> Path:
+    """Return the user-level directory containing query templates."""
+    return get_neoflow_home_path() / TEMPLATES_DIR
+
+
+def _copy_missing_files(source: Path, target: Path) -> None:
+    """Copy files from source to target without overwriting existing files."""
+    if not source.is_dir():
+        return
+
+    target.mkdir(parents=True, exist_ok=True)
+    for path in source.rglob("*"):
+        if path.name == "__pycache__":
+            continue
+
+        relative = path.relative_to(source)
+        destination = target / relative
+
+        if path.is_dir():
+            destination.mkdir(parents=True, exist_ok=True)
+            continue
+
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if not destination.exists():
+            shutil.copy2(path, destination)
+
+
+def bootstrap_user_resource_folders() -> Path:
+    """Ensure user-level prompt/template resource folders exist.
+
+    On first run, this copies bundled defaults into ``~/.neoflow`` so runtime
+    loading does not depend on project-local resource folders.
+    """
+    home_dir = get_neoflow_home_path()
+    home_dir.mkdir(parents=True, exist_ok=True)
+
+    package_dir = Path(__file__).resolve().parent
+    source_agent_prompts = package_dir / AGENT_SYSTEM_PROMPT_DIR
+    source_templates = package_dir / TEMPLATES_DIR
+
+    _copy_missing_files(source_agent_prompts, get_neoflow_agent_system_prompt_dir())
+    _copy_missing_files(source_templates, get_neoflow_templates_dir())
+
+    return home_dir
 
 
 def run_init(console: Console) -> None:

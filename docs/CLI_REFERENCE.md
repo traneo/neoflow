@@ -405,7 +405,7 @@ neoflow templates [OPTIONS]
 ```
 
 **Options:**
-- `--path <dir>` - Templates directory (default: `templates/`)
+- `--path <dir>` - Templates directory (default: `~/.neoflow/templates/`)
 
 **Example:**
 ```bash
@@ -588,6 +588,8 @@ You: /t=status
 [Fill template form]
 ```
 
+Templates are loaded from `~/.neoflow/templates/`. On first run, NeoFlow copies bundled defaults there.
+
 ### 5. Background Server
 ```bash
 nohup neoflow server --rest > server.log 2>&1 &
@@ -633,7 +635,7 @@ export AGENT_CONTEXT_TOKEN_THRESHOLD=15000
 ### Common Errors
 
 **"Template not found":**
-- Check `templates/` directory exists
+- Check `~/.neoflow/templates/` directory exists
 - Verify template name (case-sensitive)
 - Ensure `.yaml` extension in file
 

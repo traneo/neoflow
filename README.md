@@ -111,6 +111,13 @@ Generate local .env for you to change all you need:
 neoflow --config
 ```
 
+NeoFlow stores runtime templates and agent domain prompts in `~/.neoflow/`:
+
+- `~/.neoflow/templates/`
+- `~/.neoflow/agent_system_prompt/`
+
+On first run, default files are copied there from bundled package resources (existing user files are not overwritten).
+
 See [docs/VLLM_SETUP.md](docs/VLLM_SETUP.md) for detailed vLLM configuration.
 
 ## Documentation

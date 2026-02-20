@@ -1,14 +1,16 @@
 # Agent System Prompts
 
-This folder contains specialized system prompts that override the default agent behavior for specific tasks and domains.
+This folder contains bundled default domain prompt files used to bootstrap user resources.
 
 ## Overview
 
-System prompts in this folder are used to tailor the AI agent's behavior for particular use cases, technologies, or workflows. When a system prompt is loaded, it replaces the default agent instructions with specialized guidance.
+On first NeoFlow run, files from this folder are copied to `~/.neoflow/agent_system_prompt/` if missing. Runtime domain loading reads from `~/.neoflow/agent_system_prompt/`.
+
+System prompts tailor the AI agent's behavior for particular use cases, technologies, or workflows.
 
 ## How to Use
 
-1. **Select a prompt**: Choose a system prompt file that matches your specific need
+1. **Select a prompt**: Choose a system prompt file in `~/.neoflow/agent_system_prompt/` that matches your specific need
 2. **Load it**: Use the NeoFlow agent system to load the prompt
 3. **Interact**: The agent will now follow the specialized instructions in that prompt
 
@@ -40,7 +42,7 @@ Each system prompt file should follow this format:
 
 To create a new system prompt:
 
-1. Create a new `.md` file in this directory
+1. Create a new `.md` file in `~/.neoflow/agent_system_prompt/`
 2. Start with the "IMPORTANT" header to override default behavior
 3. Define the agent's new role and expertise
 4. Provide specific instructions, including:
@@ -59,7 +61,7 @@ To create a new system prompt:
 
 ## Examples
 
-See the existing prompt files in this directory for examples of well-structured system prompts. Each prompt is tailored for a specific domain or task while maintaining a consistent format.
+See the existing prompt files in `~/.neoflow/agent_system_prompt/` for examples of well-structured system prompts. Each prompt is tailored for a specific domain or task while maintaining a consistent format.
 
 ## Notes
 

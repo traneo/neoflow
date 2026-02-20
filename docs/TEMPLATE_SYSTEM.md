@@ -21,6 +21,12 @@ Templates provide reusable query patterns with user-fillable fields. They're use
 - Report generation
 - Documentation creation
 
+### Template Storage Location
+
+- Runtime templates are loaded from `~/.neoflow/templates/`.
+- On first NeoFlow run, default templates are copied there from bundled package files.
+- User files in `~/.neoflow/templates/` are never overwritten during bootstrap.
+
 ## Template Structure
 
 Templates are YAML files with two main sections:
@@ -61,7 +67,7 @@ prompt:
 
 ### Step 1: Create Template File
 
-Create `templates/your_template.yaml`:
+Create `~/.neoflow/templates/your_template.yaml`:
 
 ```yaml
 form:
@@ -150,7 +156,7 @@ curl http://localhost:9720/api/v1/templates
 
 ### Example 1: Statement of Work
 
-**templates/sow.yaml:**
+**~/.neoflow/templates/sow.yaml:**
 
 ```yaml
 form:
@@ -208,7 +214,7 @@ Timeline: 6 weeks
 
 ### Example 2: Status Report
 
-**templates/status.yaml:**
+**~/.neoflow/templates/status.yaml:**
 
 ```yaml
 form:
@@ -255,7 +261,7 @@ prompt:
 
 ### Example 3: Code Review
 
-**templates/review.yaml:**
+**~/.neoflow/templates/review.yaml:**
 
 ```yaml
 form:
@@ -289,7 +295,7 @@ prompt:
 
 ### Example 4: API Documentation
 
-**templates/api_docs.yaml:**
+**~/.neoflow/templates/api_docs.yaml:**
 
 ```yaml
 form:
@@ -327,7 +333,7 @@ prompt:
 
 ### Example 5: Bug Report
 
-**templates/bug.yaml:**
+**~/.neoflow/templates/bug.yaml:**
 
 ```yaml
 form:
@@ -476,7 +482,7 @@ form:
 ### Directory Structure
 
 ```
-templates/
+~/.neoflow/templates/
 ├── README.md                 # Template documentation
 ├── sow.yaml                  # Statement of Work
 ├── status.yaml               # Status reports
@@ -517,9 +523,9 @@ See TEMPLATE_GUIDE.md for instructions.
 **Error:** `Template 'xxx' not found`
 
 **Check:**
-1. File exists: `ls templates/xxx.yaml`
+1. File exists: `ls ~/.neoflow/templates/xxx.yaml`
 2. Extension is `.yaml` (not `.yml`)
-3. File is in `templates/` directory
+3. File is in `~/.neoflow/templates/` directory
 
 ### Missing Placeholder
 
@@ -539,7 +545,7 @@ fields:
 
 **Fix:** Check YAML syntax:
 ```bash
-python -m yaml templates/xxx.yaml
+python -m yaml ~/.neoflow/templates/xxx.yaml
 # Or use online YAML validator
 ```
 

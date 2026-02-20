@@ -62,6 +62,19 @@ project/
 
 Agent automatically loads these files for context.
 
+### 5. User-Level NeoFlow Resources
+
+NeoFlow also uses a user-level directory at `~/.neoflow/` for shared resources:
+
+```
+~/.neoflow/
+├── templates/                 # Query templates used by /t=...
+└── agent_system_prompt/       # Domain prompt files used by @domain mentions
+```
+
+On first run, NeoFlow bootstraps these folders by copying bundled defaults into
+`~/.neoflow/` (without overwriting existing user files).
+
 ## Configuration Sections
 
 ### Weaviate Configuration

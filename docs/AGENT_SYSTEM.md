@@ -130,7 +130,7 @@ Load specialized knowledge for specific domains:
 neoflow agent "@python @fastapi Create a user registration endpoint"
 ```
 
-Available domains stored in `neoflow/agent_system_prompt/`.
+Available domains are loaded from `~/.neoflow/agent_system_prompt/`.
 
 ### 4. Context Optimization
 
@@ -349,7 +349,7 @@ neoflow agent "@react @typescript Create a login form component"
 
 ### Available Domains
 
-Domains are stored in `neoflow/agent_system_prompt/`:
+Domains are loaded from `~/.neoflow/agent_system_prompt/`:
 
 - `python.md` - Python best practices
 - `react.md` - React patterns
@@ -358,9 +358,11 @@ Domains are stored in `neoflow/agent_system_prompt/`:
 - `database.md` - Database design
 - (Add more as needed)
 
+On first NeoFlow run, bundled default domain files are copied into this folder if they are missing.
+
 ### Creating Custom Domains
 
-Create a markdown file in `neoflow/agent_system_prompt/`:
+Create a markdown file in `~/.neoflow/agent_system_prompt/`:
 
 ```markdown
 # Django Domain Knowledge

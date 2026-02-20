@@ -4,9 +4,6 @@ import logging
 import os
 import sys
 from datetime import datetime
-import pathlib
-import subprocess
-import platform
 
 from rich.console import Console
 from rich.logging import RichHandler
@@ -17,6 +14,7 @@ from rich.table import Table
 
 from neoflow.agent.input import multiline_prompt
 from neoflow.config import Config
+from neoflow.init import bootstrap_user_resource_folders
 from neoflow.status_bar import StatusBar, status_context
 from neoflow.template import load_template, run_template_form, TemplateError
 
@@ -581,24 +579,6 @@ Contact:
             console.print(Panel(Markdown(answer), title="Answer", border_style="green"))
             console.print()
 
-
-
-def get_or_create_neoflow_folder(console: Console = console) -> str:
-    # Get home directory in a cross-platform way
-    home = pathlib.Path.home()
-    neoflow_path = home / ".neoflow"
-
-    # Create folder if it doesn't exist
-    if not neoflow_path.exists():
-        console.print(f"[green]Creating NeoFlow config folder at {neoflow_path}[/green]")
-        neoflow_path.mkdir(parents=True, exist_ok=True)
-
-        # On Windows, set hidden attribute
-        if platform.system() == "Windows":
-            subprocess.call(["attrib", "+h", str(neoflow_path)])
-
-    return str(neoflow_path)
-
 def main():
     parser = argparse.ArgumentParser(
         prog="neoflow",
@@ -717,7 +697,7 @@ def main():
     
     _setup_logging(args.verbose, args.info, stderr_only=stderr_logging)
 
-    user_config_override = get_or_create_neoflow_folder(console)
+    user_config_override = str(bootstrap_user_resource_folders())
 
     # Load .env if available
     from dotenv import load_dotenv
