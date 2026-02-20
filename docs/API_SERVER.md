@@ -32,13 +32,13 @@ NeoFlow provides a production-ready REST API built with FastAPI, offering both s
 
 ```bash
 # Default (localhost:9720)
-neoflow serve
+neoflow server --rest
 
 # Custom host and port
-neoflow serve --host 0.0.0.0 --port 8000
+neoflow server --rest --host 0.0.0.0 --port 8000
 
 # Development mode with auto-reload
-neoflow serve --reload
+neoflow server --rest --reload
 ```
 
 ### Test Connection

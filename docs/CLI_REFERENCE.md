@@ -18,7 +18,7 @@ NeoFlow provides a rich command-line interface for all operations. The CLI suppo
 - **Interactive Mode**: Default mode with multi-turn conversation
 - **Agent Mode**: Autonomous task execution with planning
 - **Search Mode**: Direct search queries
-- **Server Mode**: Start REST API server
+- **Server Mode**: Start REST API, MCP server, or MCP proxy
 - **Import Mode**: Data import and indexing
 - **GitLab Mode**: Repository management
 
@@ -172,29 +172,43 @@ neoflow search -q "API documentation" -o api_docs
 
 ### Server Mode
 
-Start REST API server.
+Start NeoFlow server in one of three modes.
 
 ```bash
-neoflow serve [OPTIONS]
+neoflow server --rest [OPTIONS]
+neoflow server --mcp [OPTIONS]
+neoflow server --proxy --remote-url <url> [OPTIONS]
 ```
 
 **Options:**
-| Option | Short | Default | Description |
-|--------|-------|---------|-------------|
-| `--host <addr>` | `-h` | `localhost` | Bind address |
-| `--port <num>` | `-p` | `9720` | Port number |
-| `--reload` | | No | Enable auto-reload (dev) |
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--rest` | Off | Run REST API server |
+| `--mcp` | Off | Run MCP server |
+| `--proxy` | Off | Run local MCP proxy (stdio → remote HTTP/SSE) |
+| `--host <addr>` | `localhost` | REST bind address (`--rest`) |
+| `--port <num>` | `9720` | REST port (`--rest`) |
+| `--reload` | No | Enable auto-reload for REST (`--rest`) |
+| `--transport <stdio\|sse>` | `stdio` | MCP transport (`--mcp`) |
+| `--remote-url <url>` | None | Remote MCP URL (`--proxy`, required) |
+| `--auth-token <token>` | None | Auth token for remote MCP (`--proxy`) |
 
 **Example:**
 ```bash
-# Default settings
-neoflow serve
+# REST API (default settings)
+neoflow server --rest
 
 # Custom host and port
-neoflow serve --host 0.0.0.0 --port 8000
+neoflow server --rest --host 0.0.0.0 --port 8000
 
-# Development mode with reload
-neoflow serve --reload
+# MCP server (stdio)
+neoflow server --mcp
+
+# MCP server (SSE)
+neoflow server --mcp --transport sse
+
+# MCP proxy to remote server
+neoflow server --proxy --remote-url http://server.example.com:9721
 ```
 
 **Server Endpoints:**
@@ -210,9 +224,7 @@ neoflow serve --reload
 
 ### Import Commands
 
-Import data into Weaviate.
-
-#### Import Tickets
+Import data into Weaviate using a single command with mode options.
 
 ```bash
 neoflow import [OPTIONS]
@@ -221,25 +233,21 @@ neoflow import [OPTIONS]
 **Options:**
 | Option | Description |
 |--------|-------------|
-| `--tickets-dir <path>` | Directory containing ticket JSON files (default: `tickets/`) |
-| `--batch-size <num>` | Batch size for imports (default: 300) |
-
-**Features:**
-- Parallel processing
-- Automatic chunking for large content
-- Progress tracking
-- Collection recreation (clears existing data)
+| `--tickets` | Import ticket data |
+| `--docs <path>` | Import documentation files from a directory |
+| `--zip <file>` | Import code from a zip archive |
+| `--name <repo>` | Repository label for zip import (required with `--zip`) |
 
 **Example:**
 ```bash
-# Default directory
-neoflow import
+# Import tickets
+neoflow import --tickets
 
-# Custom directory
-neoflow import --tickets-dir ./data/tickets
+# Import documentation
+neoflow import --docs ./docs
 
-# Custom batch size
-neoflow import --batch-size 500
+# Import code zip
+neoflow import --zip ./repo.zip --name my-repo
 ```
 
 **Ticket Format:**
@@ -317,12 +325,12 @@ All collections cleared successfully.
 
 Manage GitLab repository indexing.
 
-#### Index Repositories
+#### GitLab Operations
 
-Index all configured repositories.
+Index all repositories or refresh one/all repositories.
 
 ```bash
-neoflow gitlab-index [OPTIONS]
+neoflow gitlab (--index | --refresh) [--repo <name>]
 ```
 
 **Prerequisites:**
@@ -339,33 +347,22 @@ neoflow gitlab-index [OPTIONS]
 
 **Example:**
 ```bash
-neoflow gitlab-index
+neoflow gitlab --index
 ```
 
-#### Refresh Repository
-
-Re-index a specific repository or all repositories.
-
+**Refresh Examples:**
 ```bash
-neoflow gitlab-refresh [OPTIONS] [REPO]
-```
+# Refresh specific repo
+neoflow gitlab --refresh --repo backend-api
 
-**Arguments:**
-- `REPO` - Repository name (optional, refreshes all if omitted)
+# Refresh all repos
+neoflow gitlab --refresh
+```
 
 **Features:**
 - Incremental update
 - Clears existing data for repository
 - Maintains other repositories
-
-**Example:**
-```bash
-# Refresh specific repo
-neoflow gitlab-refresh backend-api
-
-# Refresh all repos
-neoflow gitlab-refresh
-```
 
 #### List Repositories
 
@@ -593,11 +590,11 @@ neoflow search -q "API authentication workflow" -o auth_docs
 docker compose up -d
 
 # Import tickets
-neoflow import --tickets-dir ./data/tickets
+neoflow import --tickets
 
 # Index GitLab repos
 export GITLAB_TOKEN=your_token
-neoflow gitlab-index
+neoflow gitlab --index
 
 # Start interactive session
 neoflow
@@ -606,7 +603,7 @@ neoflow
 #### 2. Development Workflow
 ```bash
 # Start server in dev mode
-neoflow serve --reload &
+neoflow server --rest --reload &
 
 # Use agent for development
 neoflow agent "Add input validation to the login endpoint"
@@ -623,7 +620,7 @@ curl -X POST http://localhost:9720/api/v1/query \
 neoflow status
 
 # Refresh GitLab index
-neoflow gitlab-refresh
+neoflow gitlab --refresh
 
 # Validate configuration
 neoflow config --validate
@@ -660,12 +657,12 @@ You: /t=status
 
 ### 5. Chain Commands
 ```bash
-neoflow import && neoflow gitlab-index && neoflow serve
+neoflow import --tickets && neoflow gitlab --index && neoflow server --rest
 ```
 
 ### 6. Background Server
 ```bash
-nohup neoflow serve > server.log 2>&1 &
+nohup neoflow server --rest > server.log 2>&1 &
 ```
 
 ---
@@ -720,7 +717,7 @@ export GITLAB_TOKEN=your_token_here
 **"Collection does not exist":**
 ```bash
 # Re-import data
-neoflow import
+neoflow import --tickets
 ```
 
 ---

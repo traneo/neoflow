@@ -53,6 +53,24 @@ NeoFlow is an AI-powered development assistant designed to streamline the softwa
    docker compose up -d
    ```
 
+### Run NeoFlow in a container (default MCP mode)
+
+NeoFlow can run directly in Docker Compose using MCP mode by default (`neoflow server --mcp`).
+
+```bash
+# Build and start NeoFlow + dependencies
+docker compose up -d --build neoflow weaviate ollama
+
+# Follow NeoFlow MCP logs
+docker compose logs -f neoflow
+```
+### Legacy Mode - If found issue when building it
+
+```bash
+export DOCKER_BUILDKIT=0
+docker compose up -d
+```
+
 ## Usage
 
 ### Interactive Mode (Default)
@@ -67,12 +85,17 @@ neoflow search -q "your search query"
 
 ### Server Mode (REST API)
 ```bash
-neoflow serve
+neoflow server --rest
 ```
 
 ### MCP Server (AI Coding Assistant Integration)
 ```bash
-neoflow mcp-server
+neoflow server --mcp
+```
+
+### MCP Proxy (Remote MCP over HTTP)
+```bash
+neoflow server --proxy --remote-url http://server.example.com:9721
 ```
 
 Exposes NeoFlow's capabilities to AI coding assistants like VS Code with GitHub Copilot, Claude Desktop, and Cursor IDE. See [docs/MCP_INTEGRATION.md](docs/MCP_INTEGRATION.md) for setup instructions.

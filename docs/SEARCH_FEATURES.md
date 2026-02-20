@@ -449,7 +449,7 @@ Weaviate caches frequently accessed results.
 ### No Results
 
 **Check:**
-1. Is data indexed? `neoflow gitlab-index`
+1. Is data indexed? `neoflow gitlab --index`
 2. Is Weaviate running? `docker ps`
 3. Try broader query
 

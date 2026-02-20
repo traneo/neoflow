@@ -113,6 +113,102 @@ class Config:
     reports_dir: str = "reports"
 
     @classmethod
+    def generate_env_template(cls) -> str:
+        """Generate a complete .env template with all configuration options."""
+        return """# ===================================================================
+# NeoFlow Configuration Template
+# ===================================================================
+#
+# Copy this file to .env and edit values as needed.
+# Values shown here are the application defaults.
+
+# -----------------------
+# Weaviate Configuration
+# -----------------------
+WEAVIATE_HOST=localhost
+WEAVIATE_PORT=8080
+
+# -----------------------
+# Importer Configuration
+# -----------------------
+IMPORTER_TICKETS_DIR=tickets
+IMPORTER_BATCH_SIZE=300
+IMPORTER_MAX_WORKERS=20
+
+# -----------------------
+# GitLab Configuration
+# -----------------------
+GITLAB_BASE_URL=https://gitlab.com/api/v4
+GITLAB_TOKEN=
+GITLAB_GROUP_PATH=mygroup/
+GITLAB_MAX_FILE_SIZE_BYTES=1000000
+GITLAB_REPOS_CONFIG=gitlab_repos.yaml
+GITLAB_LIVE_SEARCH_KEYWORDS=gitlab:,repository:,repo:,project:
+
+# -----------------------
+# Agent Configuration
+# -----------------------
+AGENT_CONTEXT_TOKEN_THRESHOLD=29000
+AGENT_LARGE_MESSAGE_RATIO=0.90
+AGENT_PLANNING_ENABLED=true
+AGENT_MAX_ITERATIONS=200
+AGENT_LOOP_DETECTION_ENABLED=true
+AGENT_LOOP_ACTION_WINDOW_SIZE=20
+AGENT_LOOP_REPETITION_THRESHOLD=8
+AGENT_LOOP_ERROR_THRESHOLD=8
+AGENT_LOOP_PATTERN_LENGTH=10
+AGENT_COMPRESSION_ENABLED=true
+AGENT_COMPRESSION_MIN_TOKENS=1000
+AGENT_COMPRESSION_MIN_CHARS=5000
+
+# -----------------------
+# Chat Configuration
+# -----------------------
+CHAT_SAVE_HISTORY=true
+CHAT_HISTORY_DIR=chat_history
+CHAT_MAX_ITERATIONS=25
+
+# -----------------------
+# REST Server Configuration
+# -----------------------
+SERVER_HOST=localhost
+SERVER_PORT=9720
+
+# -----------------------
+# MCP Server Configuration
+# -----------------------
+MCP_ENABLED=true
+MCP_TRANSPORT=stdio
+MCP_SSE_HOST=localhost
+MCP_SSE_PORT=9721
+MCP_TIMEOUT_SECONDS=30
+MCP_AUTH_REQUIRED=false
+MCP_AUTH_TOKEN=
+
+# -----------------------
+# LLM Provider Configuration
+# -----------------------
+LLM_PROVIDER=auto
+
+# OpenAI provider
+OPENAI_API_KEY=
+OPENAI_API_BASE=
+OPENAI_MODEL=gpt-4o-mini
+
+# vLLM provider
+VLLM_API_URL=http://vllm:8000
+VLLM_MODEL=meta-llama/Llama-2-13b-chat-hf
+
+# Ollama provider
+OLLAMA_API_URL=http://ollama:11434
+OLLAMA_MODEL=glm-4.7-flash
+EMBEDDING_MODEL=nomic-embed-text
+
+# Common provider tuning
+CHUNK_SIZE_BYTES=2000
+"""
+
+    @classmethod
     def from_env(cls) -> "Config":
         """Load configuration with environment variable overrides."""
         config = cls()

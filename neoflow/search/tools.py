@@ -87,14 +87,30 @@ def strip_json_blocks(text: str) -> str:
 def _weaviate_client(config: Config):
     """Create a Weaviate client using the app config."""
     wv = config.weaviate
-    return weaviate.connect_to_local(
-        additional_config=AdditionalConfig(
-            timeout=Timeout(
-                init=wv.timeout_init,
-                query=wv.timeout_query,
-                insert=wv.timeout_insert,
-            )
+    additional_config = AdditionalConfig(
+        timeout=Timeout(
+            init=wv.timeout_init,
+            query=wv.timeout_query,
+            insert=wv.timeout_insert,
         )
+    )
+
+    # Use local convenience connector only for localhost.
+    # For Docker/K8s deployments, honor configured host/port.
+    if wv.host in {"localhost", "127.0.0.1"}:
+        return weaviate.connect_to_local(
+            port=wv.port,
+            additional_config=additional_config,
+        )
+
+    return weaviate.connect_to_custom(
+        http_host=wv.host,
+        http_port=wv.port,
+        http_secure=False,
+        grpc_host=wv.host,
+        grpc_port=50051,
+        grpc_secure=False,
+        additional_config=additional_config,
     )
 
 

@@ -4,6 +4,7 @@ Main server that handles Model Context Protocol communication,
 tool registration, and request processing.
 """
 
+import asyncio
 import logging
 from typing import Any
 
@@ -138,17 +139,17 @@ def create_mcp_server(config: Config | None = None) -> Server:
         try:
             # Route to appropriate tool handler
             if name == "ask_chat":
-                result = tool_ask_chat(config, arguments)
+                result = await asyncio.to_thread(tool_ask_chat, config, arguments)
             elif name == "search_code":
-                result = tool_search_code(config, arguments)
+                result = await asyncio.to_thread(tool_search_code, config, arguments)
             elif name == "search_documentation":
-                result = tool_search_documentation(config, arguments)
+                result = await asyncio.to_thread(tool_search_documentation, config, arguments)
             elif name == "search_tickets":
-                result = tool_search_tickets(config, arguments)
+                result = await asyncio.to_thread(tool_search_tickets, config, arguments)
             elif name == "get_full_ticket":
-                result = tool_get_full_ticket(config, arguments)
+                result = await asyncio.to_thread(tool_get_full_ticket, config, arguments)
             elif name == "gitlab_live_search":
-                result = tool_gitlab_live_search(config, arguments)
+                result = await asyncio.to_thread(tool_gitlab_live_search, config, arguments)
             else:
                 error_msg = f"Unknown tool: {name}"
                 logger.error(error_msg)
@@ -192,27 +193,38 @@ async def run_mcp_server(transport: str = "stdio", config: Config | None = None)
     elif transport == "sse":
         from mcp.server.sse import SseServerTransport
         from starlette.applications import Starlette
+        from starlette.responses import PlainTextResponse
         from starlette.routing import Route
         
         logger.info(f"Starting MCP server with SSE transport on {config.mcp.sse_host}:{config.mcp.sse_port}")
         
         sse = SseServerTransport("/messages")
-        
-        async def handle_sse(request):
-            async with sse.connect_sse(
-                request.scope, request.receive, request._send
-            ) as streams:
-                await server.run(
-                    streams[0], streams[1], server.create_initialization_options()
-                )
-        
-        async def handle_messages(request):
-            await sse.handle_post_message(request.scope, request.receive, request._send)
+
+        class SseEndpoint:
+            async def __call__(self, scope, receive, send):
+                if scope["method"] != "GET":
+                    response = PlainTextResponse("Method Not Allowed", status_code=405)
+                    await response(scope, receive, send)
+                    return
+
+                async with sse.connect_sse(scope, receive, send) as streams:
+                    await server.run(
+                        streams[0], streams[1], server.create_initialization_options()
+                    )
+
+        class MessagesEndpoint:
+            async def __call__(self, scope, receive, send):
+                if scope["method"] != "POST":
+                    response = PlainTextResponse("Method Not Allowed", status_code=405)
+                    await response(scope, receive, send)
+                    return
+
+                await sse.handle_post_message(scope, receive, send)
         
         app = Starlette(
             routes=[
-                Route("/sse", endpoint=handle_sse),
-                Route("/messages", endpoint=handle_messages, methods=["POST"]),
+                Route("/sse", endpoint=SseEndpoint()),
+                Route("/messages", endpoint=MessagesEndpoint(), methods=["POST"]),
             ]
         )
         

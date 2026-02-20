@@ -118,11 +118,30 @@ def _save_report(content: str, name: str):
 
 
 def cmd_import(args, config: Config):
-    """Import ticket data into Weaviate."""
-    from neoflow.importer.importer import import_tickets
+    """Import tickets, documentation, or zip code into Weaviate."""
+    if getattr(args, "name", None) and not getattr(args, "zip", None):
+        console.print("[red bold]--name requires --zip.[/red bold]")
+        sys.exit(1)
 
-    _check_services(config)
-    import_tickets(config)
+    if getattr(args, "docs", None):
+        args.path = args.docs
+        cmd_import_documentation(args, config)
+        return
+
+    if getattr(args, "zip", None):
+        if not getattr(args, "name", None):
+            console.print("[red bold]--zip requires --name.[/red bold]")
+            sys.exit(1)
+        args.file = args.zip
+        cmd_import_zip(args, config)
+        return
+
+    if getattr(args, "tickets", False):
+        from neoflow.importer.importer import import_tickets
+
+        _check_services(config)
+        import_tickets(config)
+        return
 
 
 def cmd_gitlab_index(args, config: Config):
@@ -157,6 +176,21 @@ def cmd_gitlab_refresh(args, config: Config):
         refresh_repo(repo_name, config)
 
     console.print(f"[green]Refresh complete: {label}[/green]")
+
+
+def cmd_gitlab(args, config: Config):
+    """Run GitLab indexing or refresh operations."""
+    if getattr(args, "repo", None) and not getattr(args, "refresh", False):
+        console.print("[red bold]--repo requires --refresh.[/red bold]")
+        sys.exit(1)
+
+    if getattr(args, "index", False):
+        cmd_gitlab_index(args, config)
+        return
+
+    if getattr(args, "refresh", False):
+        cmd_gitlab_refresh(args, config)
+        return
 
 
 def cmd_import_documentation(args, config: Config):
@@ -358,6 +392,53 @@ def cmd_mcp_proxy(args, config: Config):
         asyncio.run(run_proxy(remote_url=remote_url, auth_token=auth_token))
     except KeyboardInterrupt:
         console.print("\n[yellow]MCP proxy stopped by user[/yellow]")
+
+
+def _resolve_server_mode(args) -> str | None:
+    """Resolve requested server mode from command/flags."""
+    command = getattr(args, "command", None)
+
+    if command == "serve":
+        return "rest"
+    if command == "mcp-server":
+        return "mcp"
+    if command == "mcp-proxy":
+        return "proxy"
+    if command != "server":
+        return None
+
+    if getattr(args, "rest", False):
+        return "rest"
+    if getattr(args, "mcp", False):
+        return "mcp"
+    if getattr(args, "proxy", False):
+        return "proxy"
+
+    return None
+
+
+def cmd_server(args, config: Config):
+    """Start NeoFlow in one of the supported server modes."""
+    mode = _resolve_server_mode(args)
+
+    if mode is None:
+        console.print("[red bold]Choose one mode: --rest, --mcp, or --proxy[/red bold]")
+        console.print("Examples: [cyan]neoflow server --rest[/cyan], [cyan]neoflow server --mcp[/cyan], [cyan]neoflow server --proxy --remote-url http://host:9721[/cyan]")
+        sys.exit(1)
+
+    if mode == "rest":
+        cmd_serve(args, config)
+        return
+
+    if mode == "mcp":
+        cmd_mcp_server(args, config)
+        return
+
+    if not getattr(args, "remote_url", None):
+        console.print("[red bold]--remote-url is required with --proxy[/red bold]")
+        sys.exit(1)
+
+    cmd_mcp_proxy(args, config)
 
 
 def cmd_interactive(args, config: Config):
@@ -597,46 +678,46 @@ def main():
     search_parser.add_argument("-p", "--project", type=str, help="Project name filter")
     search_parser.add_argument("-o", "--output", type=str, help="Save result to this filename")
 
-    # interactive
-    interactive_parser = subparsers.add_parser("interactive", help="Interactive chat session")
-    interactive_parser.add_argument(
-        "--save-history", action="store_true", default=None,
-        help="Save chat history on exit (default: from config)",
-    )
-    interactive_parser.add_argument(
-        "--no-save-history", action="store_true",
-        help="Disable chat history saving",
-    )
-
     # import
-    subparsers.add_parser("import", help="Import ticket data into Weaviate")
-
-    # import-documentation
-    doc_parser = subparsers.add_parser("import-documentation", help="Import documentation files into Weaviate")
-    doc_parser.add_argument(
-        "--path", type=str, required=True,
-        help="Path to the documentation directory",
+    import_parser = subparsers.add_parser(
+        "import",
+        help="Import tickets, docs, or zip code into Weaviate",
+    )
+    mode_group = import_parser.add_mutually_exclusive_group(required=True)
+    mode_group.add_argument(
+        "--tickets", action="store_true",
+        help="Import ticket data",
+    )
+    mode_group.add_argument(
+        "--docs", type=str, default=None,
+        help="Path to documentation directory to import",
+    )
+    mode_group.add_argument(
+        "--zip", type=str, default=None,
+        help="Path to zip file to import as code",
+    )
+    import_parser.add_argument(
+        "--name", type=str, default=None,
+        help="Repository name label (required with --zip)",
     )
 
-    # import-zip
-    zip_parser = subparsers.add_parser("import-zip", help="Import code from a zip file into Weaviate")
-    zip_parser.add_argument(
-        "-f", "--file", type=str, required=True,
-        help="Path to the zip file",
+    # gitlab
+    gitlab_parser = subparsers.add_parser(
+        "gitlab",
+        help="Index or refresh GitLab repositories",
     )
-    zip_parser.add_argument(
-        "-n", "--name", type=str, required=True,
-        help="Repository name label for the imported code",
+    gitlab_mode_group = gitlab_parser.add_mutually_exclusive_group(required=True)
+    gitlab_mode_group.add_argument(
+        "--index", action="store_true",
+        help="Index all configured GitLab repositories",
     )
-
-    # gitlab-index
-    subparsers.add_parser("gitlab-index", help="Index configured GitLab repos into Weaviate")
-
-    # gitlab-refresh
-    refresh_parser = subparsers.add_parser("gitlab-refresh", help="Re-index GitLab repos")
-    refresh_parser.add_argument(
+    gitlab_mode_group.add_argument(
+        "--refresh", action="store_true",
+        help="Refresh one or all indexed repositories",
+    )
+    gitlab_parser.add_argument(
         "--repo", type=str, default=None,
-        help="Specific repo name to refresh (default: all)",
+        help="Specific repo name to refresh (requires --refresh)",
     )
 
     # config
@@ -650,38 +731,45 @@ def main():
         help="Overwrite existing file without confirmation",
     )
 
-    # serve
-    serve_parser = subparsers.add_parser("serve", help="Start REST API server")
-    serve_parser.add_argument(
+    # server
+    server_parser = subparsers.add_parser(
+        "server",
+        help="Start REST API server, MCP server, or MCP proxy",
+    )
+    server_mode_group = server_parser.add_mutually_exclusive_group(required=False)
+    server_mode_group.add_argument(
+        "--rest", action="store_true",
+        help="Run REST API server",
+    )
+    server_mode_group.add_argument(
+        "--mcp", action="store_true",
+        help="Run MCP server",
+    )
+    server_mode_group.add_argument(
+        "--proxy", action="store_true",
+        help="Run local MCP HTTP proxy",
+    )
+    server_parser.add_argument(
         "--host", type=str, default=None,
         help="Server host (default: localhost)",
     )
-    serve_parser.add_argument(
+    server_parser.add_argument(
         "--port", type=int, default=None,
         help="Server port (default: 9720)",
     )
-    serve_parser.add_argument(
+    server_parser.add_argument(
         "--reload", action="store_true",
         help="Enable auto-reload for development",
     )
-
-    # mcp-server
-    mcp_parser = subparsers.add_parser("mcp-server", help="Start MCP (Model Context Protocol) server")
-    mcp_parser.add_argument(
+    server_parser.add_argument(
         "--transport", type=str, choices=["stdio", "sse"], default=None,
         help="Transport protocol (default: stdio)",
     )
-
-    # mcp-proxy
-    proxy_parser = subparsers.add_parser(
-        "mcp-proxy",
-        help="Proxy local MCP clients to a remote NeoFlow MCP server over HTTP"
+    server_parser.add_argument(
+        "--remote-url", type=str, default=None,
+        help="Remote MCP server URL (required with --proxy)",
     )
-    proxy_parser.add_argument(
-        "--remote-url", type=str, required=True,
-        help="Remote MCP server URL (e.g., http://server.example.com:9721)",
-    )
-    proxy_parser.add_argument(
+    server_parser.add_argument(
         "--auth-token", type=str, default=None,
         help="Authentication token for remote server (optional)",
     )
@@ -691,7 +779,8 @@ def main():
     # For MCP server with stdio transport, we need to redirect all logging to stderr
     # to avoid interfering with JSON-RPC over stdio
     stderr_logging = False
-    if args.command == "mcp-server":
+    server_mode = _resolve_server_mode(args)
+    if server_mode == "mcp":
         # Check if transport is stdio (either from args or will default to stdio)
         transport = getattr(args, "transport", None) or "stdio"  # Default is stdio
         stderr_logging = (transport == "stdio")
@@ -721,28 +810,19 @@ def main():
     commands = {
         "search": cmd_search,
         "import": cmd_import,
-        "import-documentation": cmd_import_documentation,
-        "interactive": cmd_interactive,
-        "gitlab-index": cmd_gitlab_index,
-        "gitlab-refresh": cmd_gitlab_refresh,
-        "import-zip": cmd_import_zip,
+        "gitlab": cmd_gitlab,
         "config": cmd_config,
-        "serve": cmd_serve,
-        "mcp-server": cmd_mcp_server,
-        "mcp-proxy": cmd_mcp_proxy,
+        "server": cmd_server,
+        "serve": cmd_server,
+        "mcp-server": cmd_server,
+        "mcp-proxy": cmd_server,
     }
 
     if args.command in commands:
-        # Apply CLI overrides for interactive chat config
-        if args.command == "interactive":
-            if getattr(args, "no_save_history", False):
-                config.chat.save_history = False
-            elif getattr(args, "save_history", None):
-                config.chat.save_history = True
         commands[args.command](args, config)
     else:
-        # parser.print_help()
-        commands["interactive"](args, config)
+        # No command specified - default to interactive mode
+        cmd_interactive(args, config)
 
 
 if __name__ == "__main__":

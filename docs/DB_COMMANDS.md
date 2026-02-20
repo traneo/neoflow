@@ -93,9 +93,9 @@ The `db clear` command includes several safety features:
 neoflow db clear
 
 # Re-import data
-neoflow import
-neoflow gitlab-index
-neoflow import-documentation --path ./docs
+neoflow import --tickets
+neoflow gitlab --index
+neoflow import --docs ./docs
 ```
 
 ### Remove Specific Data
@@ -106,7 +106,7 @@ neoflow db clear --collection Tickets
 neoflow db clear --collection Comments
 
 # Re-import tickets
-neoflow import
+neoflow import --tickets
 ```
 
 ### Clean Up Before Re-indexing
@@ -116,7 +116,7 @@ neoflow import
 neoflow db clear --collection CodeSnippets
 
 # Re-index from GitLab
-neoflow gitlab-index
+neoflow gitlab --index
 ```
 
 ## Prerequisites
@@ -144,10 +144,10 @@ Operation cancelled.
 
 ## Related Commands
 
-- `neoflow import` - Import ticket data
-- `neoflow gitlab-index` - Index GitLab repositories
-- `neoflow import-documentation` - Import documentation files
-- `neoflow gitlab-refresh` - Refresh GitLab repository index
+- `neoflow import --tickets` - Import ticket data
+- `neoflow gitlab --index` - Index GitLab repositories
+- `neoflow import --docs <path>` - Import documentation files
+- `neoflow gitlab --refresh` - Refresh GitLab repository index
 
 ## Technical Details
 

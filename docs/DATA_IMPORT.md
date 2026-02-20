@@ -118,7 +118,7 @@ On import, collections are recreated:
 ### Basic Import
 
 ```bash
-neoflow import
+neoflow import --tickets
 ```
 
 Imports from default `tickets/` directory.
@@ -126,13 +126,13 @@ Imports from default `tickets/` directory.
 ### Custom Directory
 
 ```bash
-neoflow import --tickets-dir ./data/support-tickets
+neoflow import --tickets
 ```
 
 ### Custom Batch Size
 
 ```bash
-neoflow import --batch-size 500
+neoflow import --tickets
 ```
 
 Default is 300. Adjust based on:
@@ -143,7 +143,7 @@ Default is 300. Adjust based on:
 ### Verbose Output
 
 ```bash
-neoflow -v import
+neoflow -v import --tickets
 ```
 
 Shows detailed progress and any errors.
@@ -232,8 +232,8 @@ For large datasets:
 
 ```bash
 # Process in batches
-neoflow import --tickets-dir ./batch1
-neoflow import --tickets-dir ./batch2
+neoflow import --tickets
+neoflow import --tickets
 # etc.
 ```
 
@@ -246,7 +246,7 @@ neoflow import --tickets-dir ./batch2
 # (Method depends on your Weaviate setup)
 
 # Then import
-neoflow import
+neoflow import --tickets
 ```
 
 ## Advanced Topics

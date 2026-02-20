@@ -235,7 +235,7 @@ enum EnumName
 ### Index All Repositories
 
 ```bash
-neoflow gitlab-index
+neoflow gitlab --index
 ```
 
 **Output:**
@@ -249,7 +249,7 @@ GitLab indexing complete.
 ### Refresh One Repository
 
 ```bash
-neoflow gitlab-refresh backend-api
+neoflow gitlab --refresh --repo backend-api
 ```
 
 Re-indexes a single repository (clears old data first).
@@ -257,7 +257,7 @@ Re-indexes a single repository (clears old data first).
 ### Refresh All Repositories
 
 ```bash
-neoflow gitlab-refresh
+neoflow gitlab --refresh
 ```
 
 ### List Configured Repositories
@@ -494,7 +494,7 @@ Schedule periodic re-indexing:
 
 ```bash
 # Cron job: daily at 2 AM
-0 2 * * * cd /path/to/neoflow && neoflow gitlab-refresh
+0 2 * * * cd /path/to/neoflow && neoflow gitlab --refresh
 ```
 
 ### 2. Selective Indexing

@@ -1,4 +1,32 @@
 services:
+  neoflow:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: neoflow
+    command: ["neoflow", "server", "--mcp"]
+    depends_on:
+      - weaviate
+      - ollama
+    environment:
+      WEAVIATE_HOST: weaviate
+      WEAVIATE_PORT: 8080
+      LLM_PROVIDER: ollama
+      OLLAMA_API_URL: http://ollama:11434
+      OLLAMA_MODEL: glm-4.7-flash
+      EMBEDDING_MODEL: nomic-embed-text
+      MCP_ENABLED: 'true'
+      MCP_TRANSPORT: sse
+      MCP_SSE_HOST: 0.0.0.0
+      MCP_SSE_PORT: 9721
+    ports:
+      - "9721:9721"
+    volumes:
+      - neoflow_config:/root/.neoflow
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
+
   weaviate:
     command:
       - --host
@@ -52,6 +80,7 @@ services:
   # To enable vLLM, see docs/VLLM_SETUP.md for detailed configuration instructions
 
 volumes:
+  neoflow_config:
   weaviate_data:
   ollama:
   vllm_models:

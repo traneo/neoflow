@@ -173,11 +173,11 @@ neoflow serve
 docker compose up -d
 
 # Import data
-neoflow import
+neoflow import --tickets
 
 # Index repositories
 export GITLAB_TOKEN=your_token
-neoflow gitlab-index
+neoflow gitlab --index
 
 # Start using
 neoflow

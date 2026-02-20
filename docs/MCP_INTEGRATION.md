@@ -46,7 +46,7 @@ NeoFlow implements MCP to expose its search capabilities as tools that AI assist
 - Compatible with any MCP client
 
 ✅ **Easy Setup**
-- Single command to start: `neoflow mcp-server`
+- Single command to start: `neoflow server --mcp`
 - Automatic tool registration
 - No additional configuration required
 
@@ -65,9 +65,9 @@ NeoFlow implements MCP to expose its search capabilities as tools that AI assist
    ```
 
 3. **Indexed Data**
-   - Import code: `neoflow import-zip -f /path/to/repo.zip -n repo-name`
-   - Import docs: `neoflow import-documentation --path /path/to/docs`
-   - Index GitLab: `neoflow gitlab-index`
+  - Import code: `neoflow import --zip /path/to/repo.zip --name repo-name`
+  - Import docs: `neoflow import --docs /path/to/docs`
+  - Index GitLab: `neoflow gitlab --index`
 
 4. **MCP Client**
    - VS Code with GitHub Copilot extension, or
@@ -81,7 +81,7 @@ NeoFlow implements MCP to expose its search capabilities as tools that AI assist
 ### 1. Start the MCP Server
 
 ```bash
-neoflow mcp-server
+neoflow server --mcp
 ```
 
 The server will start in stdio mode and wait for MCP protocol messages.
@@ -94,7 +94,7 @@ The server will start in stdio mode and wait for MCP protocol messages.
   "github.copilot.chat.mcp.servers": {
     "neoflow": {
       "command": "neoflow",
-      "args": ["mcp-server"]
+      "args": ["server", "--mcp"]
     }
   }
 }
@@ -108,7 +108,7 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS):
   "mcpServers": {
     "neoflow": {
       "command": "neoflow",
-      "args": ["mcp-server"]
+      "args": ["server", "--mcp"]
     }
   }
 }
@@ -650,10 +650,10 @@ chmod +x $(which neoflow)
 2. **Import Data**
    ```bash
    # Import code
-   neoflow import-zip -f /path/to/repo.zip -n repo-name
+  neoflow import --zip /path/to/repo.zip --name repo-name
    
    # Import documentation
-   neoflow import-documentation --path /path/to/docs
+  neoflow import --docs /path/to/docs
    ```
 
 3. **Check Search Query**
@@ -781,13 +781,13 @@ Regularly update indexed data:
 
 ```bash
 # Refresh GitLab repositories
-neoflow gitlab-refresh
+neoflow gitlab --refresh
 
 # Re-import updated documentation
-neoflow import-documentation --path /path/to/docs
+neoflow import --docs /path/to/docs
 
 # Import new code archives
-neoflow import-zip -f /path/to/updated-repo.zip -n repo-name
+neoflow import --zip /path/to/updated-repo.zip --name repo-name
 ```
 
 ---
