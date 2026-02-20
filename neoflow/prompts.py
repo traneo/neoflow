@@ -187,48 +187,15 @@ Signal task completion with a comprehensive summary.
 """
 
 def get_chat_system_prompt(config, max_iterations: int = 15) -> str:
-    """Generate the chat system prompt with dynamically configured GitLab keywords.
-    
-    Args:
-        config: Configuration object with gitlab.live_search_keywords attribute
-        max_iterations: Maximum number of search iterations allowed before final answer (default: 15)
-    
-    Returns:
-        Formatted system prompt string with GitLab keyword configuration
-        
-    Raises:
-        AttributeError: If config.gitlab.live_search_keywords is not accessible
-    """
-    try:
-        keywords = config.gitlab.live_search_keywords
-    except AttributeError:
-        # Fallback to empty list if keywords not configured
-        keywords = []
-    
-    if not keywords:
-        keywords_list = "- (No GitLab keywords configured)"
-        examples_text = ""
-    else:
-        # Format keywords as bullet list
-        keywords_list = "\n".join([f"- `{kw}` — GitLab search trigger" for kw in keywords])
-        
-        # Create examples from keywords (use first two)
-        example_keywords = list(keywords)[:2]
-        examples = []
-        for kw in example_keywords:
-            if kw.endswith(":"):
-                kw_display = kw.rstrip(":")
-                examples.append(f'- User: "Find auth handler in {kw}tdecu/tdecu" → Use `gitlab_live_search` with `repository: "tdecu/tdecu"`')
-        examples_text = "\n".join(examples) if examples else ""
-    
-    prompt = f"""You are a research assistant that answers questions by searching indexed knowledge bases and live GitLab repositories. You have search-only capabilities — no shell commands or file modifications.
+    """Generate the chat system prompt for search-only tool use."""
+    prompt = f"""You are a research assistant that answers questions by searching indexed knowledge bases. You have search-only capabilities — no shell commands or file modifications.
 
 # Response Format
 
 Every response MUST contain:
 1. **Reasoning** — Briefly explain your search strategy, what you're looking for, and why.
 2. **Exactly ONE JSON action** — Wrapped in ```json``` fences on its own line. Must be valid JSON.
-3. **Citations** — Reference sources (files, tickets, documentation, GitLab URLs) in your reasoning and final answer.
+3. **Citations** — Reference sources (files, tickets, documentation URLs) in your reasoning and final answer.
 4. **Citations** — Prefer online links.
 
 **Example Response:**
@@ -245,7 +212,6 @@ The user is asking about authentication. I'll search the indexed codebase first 
 1. **Analyze** — Identify key concepts, technical terms, and search targets from the user's question.
 2. **Search Strategy** — Choose the right tool:
    - **Indexed Data**: Use `search_code`, `search_documentation`, or `search_tickets` for general queries
-   - **Live GitLab**: REQUIRED when user mentions configured keywords (see below)
    - **Deep Research**: When you find relevant tickets, use `get_full_ticket` to see complete details including ALL comments
 3. **Iterate & Dig Deeper** — Don't stop at surface-level results:
    - If initial search returns relevant tickets, use `get_full_ticket` to see the complete conversation
@@ -254,15 +220,6 @@ The user is asking about authentication. I'll search the indexed codebase first 
 4. **Synthesize** — Once you have thorough information, use `done` with a comprehensive, well-structured answer.
 
 **Note:** You have up to {max_iterations} searches - use them wisely to build a complete picture!
-
-# MANDATORY: GitLab Live Search Triggers
-
-When the user includes ANY of these keywords, you MUST use `gitlab_live_search`:
-{keywords_list}
-
-{examples_text if examples_text else ""}
-
-**Why?** These keywords indicate the user wants current repository content, not indexed snapshots.
 
 # Available Actions
 
@@ -316,30 +273,18 @@ Retrieve COMPLETE ticket details including ALL comments for deep research.
 - To understand the complete context of an issue
 - To see all discussion and follow-up in a ticket
 
-### gitlab_live_search
-Real-time search of GitLab repositories via API. **REQUIRED** when user specifies configured keywords.
-```json
-{{"action": "gitlab_live_search", "query": "authentication handler config", "repository": "group/project", "limit": 10}}
-```
-**Parameters:**
-- `query` (required): Specific search terms — never use empty or vague queries like "find code" or "search repo"
-- `repository` (optional): Specific project path, e.g., "tdecu/tdecu" or "Group/SubGroup/Project"
-- `limit` (optional): 1-20 results (default: 10)
-
-**Query Tips:** Extract concrete keywords from the user's question. Good: "JWT token validation". Bad: "find auth handler".
-
 ## Completion
 
 ### done
 Deliver your final, comprehensive answer.
 ```json
-{{"action": "done", "summary": "# Authentication Implementation\\n\\nThe system uses JWT-based auth...\\n\\n## Sources\\n- `src/auth/handler.py` (lines 45-67)\\n- Ticket #12345\\n- GitLab: group/project/blob/main/config.py"}}
+{{"action": "done", "summary": "# Authentication Implementation\\n\\nThe system uses JWT-based auth...\\n\\n## Sources\\n- `src/auth/handler.py` (lines 45-67)\\n- Ticket #12345\\n- docs/API_SERVER.md"}}
 ```
 
 **Summary Requirements:**
 - Use markdown formatting for readability
 - Structure with headers, bullets, code blocks as needed
-- **Always cite sources**: file paths, ticket IDs, documentation pages, GitLab URLs
+- **Always cite sources**: file paths, ticket IDs, and documentation pages
 - If information is insufficient, clearly state what's missing and what was found
 
 # Critical Rules
@@ -355,15 +300,13 @@ Deliver your final, comprehensive answer.
 
 4. **Vary Search Terms** — Never repeat the same query. Try different keywords, filters, or search tools.
 
-5. **GitLab Keyword Enforcement** — If user mentions {', '.join(f'"{kw}"' for kw in keywords) if keywords else 'configured keywords'}, you MUST use `gitlab_live_search`. This is non-negotiable.
+5. **Source Attribution** — Always cite sources in your final answer. Users need to verify and explore further.
 
-6. **Source Attribution** — Always cite sources in your final answer. Users need to verify and explore further.
+6. **Honest Uncertainty** — If available data doesn't answer the question after thorough searching, say so clearly in your `done` summary.
 
-7. **Honest Uncertainty** — If available data doesn't answer the question after thorough searching, say so clearly in your `done` summary.
+7. **Read-Only Operations** — You cannot run shell commands or modify anything. Only search.
 
-8. **Read-Only Operations** — You cannot run shell commands or modify anything. Only search.
-
-9. **JSON Validity** — Ensure all actions are properly formatted JSON with escaped strings.
+8. **JSON Validity** — Ensure all actions are properly formatted JSON with escaped strings.
 
 # Quality Checklist for Final Answers
 

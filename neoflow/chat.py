@@ -23,7 +23,6 @@ from neoflow.search.tools import (
     search_code,
     search_documentation,
     search_tickets,
-    gitlab_live_search,
     get_full_ticket,
 )
 from neoflow.status_bar import StatusBar, estimate_tokens, status_context
@@ -31,12 +30,11 @@ from neoflow.status_bar import StatusBar, estimate_tokens, status_context
 logger = logging.getLogger(__name__)
 
 # Tools allowed in chat mode
-_CHAT_TOOLS = {"search_tickets", "search_code", "search_documentation", "gitlab_live_search", "get_full_ticket", "done"}
+_CHAT_TOOLS = {"search_tickets", "search_code", "search_documentation", "get_full_ticket", "done"}
 
 _TOOL_STATUS_LABELS = {
     "search_code": "Searching code...",
     "search_documentation": "Searching documentation...",
-    "gitlab_live_search": "Searching GitLab...",
     "search_tickets": "Searching tickets...",
     "get_full_ticket": "Retrieving full ticket details...",
 }
@@ -135,7 +133,7 @@ def run_chat(
                         "I see your reasoning. What would you like to do next? "
                         "Please either:\n"
                         "1. Use an available action (search_tickets, search_code, search_documentation, "
-                        "gitlab_live_search) to gather more information, or\n"
+                        "get_full_ticket) to gather more information, or\n"
                         "2. Use the 'done' action with your final answer if you have sufficient information."
                         "3. Use the 'done' action if you are asking a question"
                     )
@@ -290,13 +288,6 @@ def _execute_chat_action(action: dict, config: Config) -> str:
             return search_documentation(
                 action["query"],
                 config,
-                limit=action.get("limit", 20),
-            )
-        elif act == "gitlab_live_search":
-            return gitlab_live_search(
-                action["query"],
-                config,
-                repository=action.get("repository"),
                 limit=action.get("limit", 20),
             )
         elif act == "get_full_ticket":

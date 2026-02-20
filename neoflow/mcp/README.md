@@ -38,12 +38,6 @@ Retrieve complete ticket details including ALL comments.
 - Use after finding relevant tickets via search_tickets
 - Returns complete conversation thread
 
-### 6. gitlab_live_search
-Real-time search on GitLab repositories via API.
-- Live search (not indexed)
-- Access latest code from GitLab
-- Search specific repositories
-
 ## Usage
 
 The MCP server is started via the CLI command:

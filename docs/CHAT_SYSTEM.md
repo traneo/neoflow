@@ -76,7 +76,6 @@ The Chat System provides an interactive, tool-augmented conversation interface f
 │  ┌────────────┬────────────┬─────────────────────┐  │
 │  │ search_code│ search_docs│ search_tickets      │  │
 │  ├────────────┴────────────┴─────────────────────┤  │
-│  │         gitlab_live_search                     │  │
 │  └────────────────────────────────────────────────┘  │
 └─────────────────────┬────────────────────────────────┘
                       │
@@ -268,20 +267,7 @@ Retrieve complete ticket details including ALL comments.
 
 **Usage:** Always use this after finding relevant tickets via `search_tickets` to see the complete conversation and context.
 
-### 5. gitlab_live_search
-
-Search GitLab repositories directly (not indexed).
-
-```json
-{
-  "action": "gitlab_live_search",
-  "query": "authentication handler config",
-  "repository": "backend-api",
-  "limit": 10
-}
-```
-
-### 6. done
+### 5. done
 
 Signal completion with final answer.
 

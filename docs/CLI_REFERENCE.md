@@ -20,7 +20,6 @@ NeoFlow provides a rich command-line interface for all operations. The CLI suppo
 - **Search Mode**: Direct search queries
 - **Server Mode**: Start REST API, MCP server, or MCP proxy
 - **Import Mode**: Data import and indexing
-- **GitLab Mode**: Repository management
 
 ## Global Options
 
@@ -150,7 +149,6 @@ neoflow search [OPTIONS]
 - Code search (indexed repositories)
 - Documentation search
 - Ticket search
-- GitLab live search
 - Global workspace search
 
 **Example:**
@@ -304,7 +302,7 @@ neoflow db clear --collection Documentation
 **Common Collections:**
 - `Tickets` - Support ticket data
 - `Comments` - Ticket comments with references
-- `CodeSnippets` - Indexed code from GitLab repositories
+- `CodeSnippets` - Indexed code from zipped repositories
 - `Documentation` - Imported documentation files
 
 **Output Example:**
@@ -321,66 +319,9 @@ All collections cleared successfully.
 
 ---
 
-### GitLab Commands
 
-Manage GitLab repository indexing.
 
-#### GitLab Operations
 
-Index all repositories or refresh one/all repositories.
-
-```bash
-neoflow gitlab (--index | --refresh) [--repo <name>]
-```
-
-**Prerequisites:**
-- `GITLAB_TOKEN` environment variable must be set
-- `gitlab_repos.yaml` configuration file
-
-**Features:**
-- Indexes all configured repositories
-- Creates Code collection in Weaviate
-- Extracts imports and definitions
-- Detects and marks test files
-- Smart code chunking with overlap
-- Progress tracking
-
-**Example:**
-```bash
-neoflow gitlab --index
-```
-
-**Refresh Examples:**
-```bash
-# Refresh specific repo
-neoflow gitlab --refresh --repo backend-api
-
-# Refresh all repos
-neoflow gitlab --refresh
-```
-
-**Features:**
-- Incremental update
-- Clears existing data for repository
-- Maintains other repositories
-
-#### List Repositories
-
-List all configured repositories.
-
-```bash
-neoflow gitlab-list
-```
-
-**Output:**
-```
-Configured GitLab Repositories:
-  - backend-api (mygroup/backend-api)
-  - frontend-app (mygroup/frontend-app)
-  - shared-lib (mygroup/shared-lib)
-```
-
----
 
 ### Status Commands
 
@@ -395,7 +336,6 @@ neoflow status [OPTIONS]
 **Checks:**
 - Weaviate connection
 - Ollama/LLM provider availability
-- GitLab API connectivity (if configured)
 
 **Example:**
 ```bash
@@ -407,7 +347,6 @@ neoflow status
 Service Status:
 ✓ Weaviate (localhost:8080)
 ✓ Ollama (http://ollama:11434)
-✓ GitLab API (configured)
 ```
 
 ---
@@ -501,13 +440,6 @@ WEAVIATE_HOST=localhost
 WEAVIATE_PORT=8080
 ```
 
-### GitLab Configuration
-```bash
-GITLAB_TOKEN=your_token_here
-GITLAB_GROUP_PATH=YourGroup/
-GITLAB_BASE_URL=https://gitlab.example.com/api/v4
-```
-
 ### LLM Provider Configuration
 ```bash
 # Provider selection
@@ -592,9 +524,6 @@ docker compose up -d
 # Import tickets
 neoflow import --tickets
 
-# Index GitLab repos
-export GITLAB_TOKEN=your_token
-neoflow gitlab --index
 
 # Start interactive session
 neoflow
@@ -618,9 +547,6 @@ curl -X POST http://localhost:9720/api/v1/query \
 ```bash
 # Check status
 neoflow status
-
-# Refresh GitLab index
-neoflow gitlab --refresh
 
 # Validate configuration
 neoflow config --validate
@@ -655,12 +581,7 @@ You: /t=status
 [Fill template form]
 ```
 
-### 5. Chain Commands
-```bash
-neoflow import --tickets && neoflow gitlab --index && neoflow server --rest
-```
-
-### 6. Background Server
+### 5. Background Server
 ```bash
 nohup neoflow server --rest > server.log 2>&1 &
 ```
@@ -708,11 +629,6 @@ export AGENT_CONTEXT_TOKEN_THRESHOLD=15000
 - Check `templates/` directory exists
 - Verify template name (case-sensitive)
 - Ensure `.yaml` extension in file
-
-**"GITLAB_TOKEN not set":**
-```bash
-export GITLAB_TOKEN=your_token_here
-```
 
 **"Collection does not exist":**
 ```bash

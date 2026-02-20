@@ -144,55 +144,6 @@ def cmd_import(args, config: Config):
         return
 
 
-def cmd_gitlab_index(args, config: Config):
-    """Index configured GitLab repositories into Weaviate."""
-    from neoflow.gitlab.indexer import index_all_repos
-
-    _check_services(config)
-
-    if not config.gitlab.api_token:
-        console.print("[red bold]GITLAB_TOKEN environment variable is not set.[/red bold]")
-        sys.exit(1)
-
-    with console.status("[bold green]Indexing GitLab repositories..."):
-        index_all_repos(config)
-
-    console.print("[green]GitLab indexing complete.[/green]")
-
-
-def cmd_gitlab_refresh(args, config: Config):
-    """Re-index one or all GitLab repositories."""
-    from neoflow.gitlab.indexer import refresh_repo
-
-    _check_services(config)
-
-    if not config.gitlab.api_token:
-        console.print("[red bold]GITLAB_TOKEN environment variable is not set.[/red bold]")
-        sys.exit(1)
-
-    repo_name = getattr(args, "repo", None)
-    label = repo_name or "all repositories"
-    with console.status(f"[bold green]Refreshing {label}..."):
-        refresh_repo(repo_name, config)
-
-    console.print(f"[green]Refresh complete: {label}[/green]")
-
-
-def cmd_gitlab(args, config: Config):
-    """Run GitLab indexing or refresh operations."""
-    if getattr(args, "repo", None) and not getattr(args, "refresh", False):
-        console.print("[red bold]--repo requires --refresh.[/red bold]")
-        sys.exit(1)
-
-    if getattr(args, "index", False):
-        cmd_gitlab_index(args, config)
-        return
-
-    if getattr(args, "refresh", False):
-        cmd_gitlab_refresh(args, config)
-        return
-
-
 def cmd_import_documentation(args, config: Config):
     """Import documentation files into Weaviate."""
     from neoflow.importer.documentation import import_documentation
@@ -214,7 +165,7 @@ def cmd_import_documentation(args, config: Config):
 
 def cmd_import_zip(args, config: Config):
     """Import code from a zip file into the CodeSnippets collection."""
-    from neoflow.gitlab.indexer import index_zip_file
+    from neoflow.importer.code_indexer import index_zip_file
 
     _check_services(config)
 
@@ -263,41 +214,12 @@ def _print_chat_help():
     table.add_row("/retry", "Run the last query again")
     table.add_row("/exit", "Exit the chat")
     table.add_row("/keyword=XXXX <query>", "Set project/keyword filter, then search")
-    table.add_row("/lsk", "Show how to use live search keywords in queries")
     table.add_row("/t=TEMPLATE", "Load a YAML template form and run its query")
     table.add_row("/agent", "Toggle agent mode on/off — LLM interacts with filesystem/commands")
     table.add_row("/init", "Create a .neoflow/ project config folder in the current directory")
     table.add_row("/help", "Show this help message")
     console.print(table)
     console.print()
-
-
-def _print_live_search_help(config: Config):
-    """Print explanation of live search keyword usage."""
-    keywords = config.gitlab.live_search_keywords
-    group_path = config.gitlab.gitlab_group_path
-
-    console.print(Panel(
-        "[bold]GitLab Live Search Keywords[/bold]\n\n"
-        "You can target specific GitLab repositories in your queries by prefixing\n"
-        "the repo name with one of the configured keywords.\n\n"
-        f"[bold cyan]Configured group path:[/bold cyan] {group_path}\n"
-        f"[bold cyan]Configured keywords:[/bold cyan] {', '.join(keywords)}\n\n"
-        "The group path is automatically prepended to the repo name you provide.\n\n"
-        "[bold]Usage in a regular query:[/bold]\n"
-        "  [dim]> repo:my-project how do I configure the vault?[/dim]\n"
-        f"  [dim]  (resolves to {group_path}/my-project)[/dim]\n\n"
-        "Multiple repos can be specified:\n"
-        "  [dim]> repo:proj1 repo:proj2 authentication flow[/dim]\n\n"
-        "[bold]Configure group path:[/bold]\n"
-        "  Set [cyan]GITLAB_GROUP_PATH[/cyan] env var:\n"
-        f"  [dim]GITLAB_GROUP_PATH=\"{group_path}\"[/dim]\n\n"
-        "[bold]Configure keywords:[/bold]\n"
-        "  Set [cyan]GITLAB_LIVE_SEARCH_KEYWORDS[/cyan] env var (comma-separated):\n"
-        "  [dim]GITLAB_LIVE_SEARCH_KEYWORDS=\"gitlab:,repo:,repository:,project:\"[/dim]",
-        title="Live Search Help",
-        border_style="blue",
-    ))
 
 
 def _save_chat_history(history: list[dict], config: Config):
@@ -354,14 +276,13 @@ def cmd_mcp_server(args, config: Config):
         stderr_console = Console(stderr=True)
         stderr_console.print("[green bold]Starting NeoFlow MCP server[/green bold]")
         stderr_console.print(f"[dim]Transport: {transport}[/dim]")
-        stderr_console.print(f"[dim]Available tools: ask_chat, search_code, search_documentation, search_tickets, [/dim]")
-        stderr_console.print(f"[dim]gitlab_live_search[/dim]")
+        stderr_console.print(f"[dim]Available tools: ask_chat, search_code, search_documentation, search_tickets, get_full_ticket[/dim]")
         stderr_console.print("[dim]Listening on stdio (for MCP clients like VS Code, Claude Desktop)...[/dim]")
         stderr_console.print(f"[dim]Press Ctrl+C to stop[/dim]")
     else:
         console.print("[green bold]Starting NeoFlow MCP server[/green bold]")
         console.print(f"[dim]Transport: {transport}[/dim]")
-        console.print(f"[dim]Available tools: ask_chat, search_code, search_documentation, search_tickets, gitlab_live_search[/dim]")
+        console.print(f"[dim]Available tools: ask_chat, search_code, search_documentation, search_tickets, get_full_ticket[/dim]")
         console.print(f"[dim]Listening on {config.mcp.sse_host}:{config.mcp.sse_port}...[/dim]")
         console.print(f"[dim]Press Ctrl+C to stop[/dim]")
 
@@ -475,7 +396,6 @@ def cmd_interactive(args, config: Config):
 [bold green]Model[/bold green]: {config.llm_provider.ollama_model}
 [bold green]Provider [/bold green]: {config.llm_provider.provider}
 [bold green]History[/bold green]: {'on' if config.chat.save_history else 'off'}
-[bold green]Gitlab status[/bold green]: {'Available' if config.gitlab.api_token else 'Not available'}
 
 Type [bold green]/init[/bold green] to create the local config.
 
@@ -552,9 +472,6 @@ Contact:
             query = last_query
             keyword = last_keyword
             console.print(f"[dim]Retrying: {query}[/dim]")
-        elif lower == "/lsk":
-            _print_live_search_help(config)
-            continue
         elif lower == "/agent":
             agent_mode = not agent_mode
             state = "on" if agent_mode else "off"
@@ -701,25 +618,6 @@ def main():
         help="Repository name label (required with --zip)",
     )
 
-    # gitlab
-    gitlab_parser = subparsers.add_parser(
-        "gitlab",
-        help="Index or refresh GitLab repositories",
-    )
-    gitlab_mode_group = gitlab_parser.add_mutually_exclusive_group(required=True)
-    gitlab_mode_group.add_argument(
-        "--index", action="store_true",
-        help="Index all configured GitLab repositories",
-    )
-    gitlab_mode_group.add_argument(
-        "--refresh", action="store_true",
-        help="Refresh one or all indexed repositories",
-    )
-    gitlab_parser.add_argument(
-        "--repo", type=str, default=None,
-        help="Specific repo name to refresh (requires --refresh)",
-    )
-
     # config
     config_parser = subparsers.add_parser("config", help="Generate .env configuration template")
     config_parser.add_argument(
@@ -810,7 +708,6 @@ def main():
     commands = {
         "search": cmd_search,
         "import": cmd_import,
-        "gitlab": cmd_gitlab,
         "config": cmd_config,
         "server": cmd_server,
         "serve": cmd_server,

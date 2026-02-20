@@ -72,7 +72,7 @@ Based on the NeoFlow data model, common collection names include:
 
 - `Tickets` - Support ticket data
 - `Comments` - Ticket comments with references
-- `CodeSnippets` - Indexed code from GitLab repositories
+- `CodeSnippets` - Indexed code from zipped repositories
 - `Documentation` - Imported documentation files
 
 ## Safety Features
@@ -94,7 +94,6 @@ neoflow db clear
 
 # Re-import data
 neoflow import --tickets
-neoflow gitlab --index
 neoflow import --docs ./docs
 ```
 
@@ -115,8 +114,6 @@ neoflow import --tickets
 # Clear code index before re-indexing
 neoflow db clear --collection CodeSnippets
 
-# Re-index from GitLab
-neoflow gitlab --index
 ```
 
 ## Prerequisites
@@ -145,9 +142,7 @@ Operation cancelled.
 ## Related Commands
 
 - `neoflow import --tickets` - Import ticket data
-- `neoflow gitlab --index` - Index GitLab repositories
 - `neoflow import --docs <path>` - Import documentation files
-- `neoflow gitlab --refresh` - Refresh GitLab repository index
 
 ## Technical Details
 

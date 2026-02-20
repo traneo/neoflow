@@ -30,7 +30,7 @@ async def execute_query(
     **Parameters:**
     - **query**: The search query text
     - **project_keyword**: Optional project name or keyword to filter results
-    - **include_code**: Whether to include GitLab code search results
+    - **include_code**: Whether to include code search results
 
     **Returns:**
     - The generated answer in markdown format

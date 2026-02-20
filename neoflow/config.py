@@ -16,22 +16,7 @@ class ImporterConfig:
     tickets_dir: str = "tickets"
     batch_size: int = 300
     max_workers: int = 20
-
-
-@dataclass
-class GitLabConfig:
-    base_url: str = "https://gitlab.com/api/v4"
-    api_token: str = ""
-    gitlab_group_path: str = "mygroup/"
     max_file_size_bytes: int = 1_000_000  # 1MB
-    repos_config_path: str = "gitlab_repos.yaml"
-    allowed_extensions: tuple[str, ...] = (
-        ".py", ".js", ".ts", ".java", ".go", ".md",
-        ".yaml", ".yml", ".json", ".xml", ".sql",
-    )
-    live_search_keywords: tuple[str, ...] = (
-        "gitlab:", "repository:", "repo:", "project:",
-    )
 
 
 @dataclass
@@ -104,7 +89,6 @@ class MCPConfig:
 class Config:
     weaviate: WeaviateConfig = field(default_factory=WeaviateConfig)
     importer: ImporterConfig = field(default_factory=ImporterConfig)
-    gitlab: GitLabConfig = field(default_factory=GitLabConfig)
     agent: AgentConfig = field(default_factory=AgentConfig)
     chat: ChatConfig = field(default_factory=ChatConfig)
     server: ServerConfig = field(default_factory=ServerConfig)
@@ -134,16 +118,7 @@ WEAVIATE_PORT=8080
 IMPORTER_TICKETS_DIR=tickets
 IMPORTER_BATCH_SIZE=300
 IMPORTER_MAX_WORKERS=20
-
-# -----------------------
-# GitLab Configuration
-# -----------------------
-GITLAB_BASE_URL=https://gitlab.com/api/v4
-GITLAB_TOKEN=
-GITLAB_GROUP_PATH=mygroup/
-GITLAB_MAX_FILE_SIZE_BYTES=1000000
-GITLAB_REPOS_CONFIG=gitlab_repos.yaml
-GITLAB_LIVE_SEARCH_KEYWORDS=gitlab:,repository:,repo:,project:
+IMPORTER_MAX_FILE_SIZE_BYTES=1000000
 
 # -----------------------
 # Agent Configuration
@@ -214,15 +189,9 @@ CHUNK_SIZE_BYTES=2000
         config = cls()
         config.weaviate.host = os.getenv("WEAVIATE_HOST", config.weaviate.host)
         config.weaviate.port = int(os.getenv("WEAVIATE_PORT", config.weaviate.port))
-        config.gitlab.api_token = os.getenv("GITLAB_TOKEN", "")
-        config.gitlab.gitlab_group_path = os.getenv(
-            "GITLAB_GROUP_PATH", config.gitlab.gitlab_group_path
-        )
-        lsk = os.getenv("GITLAB_LIVE_SEARCH_KEYWORDS", "")
-        if lsk:
-            config.gitlab.live_search_keywords = tuple(
-                k.strip() for k in lsk.split(",") if k.strip()
-            )
+        config.importer.max_file_size_bytes = int(os.getenv(
+            "IMPORTER_MAX_FILE_SIZE_BYTES", config.importer.max_file_size_bytes
+        ))
         config.agent.context_token_threshold = int(os.getenv(
             "AGENT_CONTEXT_TOKEN_THRESHOLD",
             config.agent.context_token_threshold,

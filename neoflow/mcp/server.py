@@ -14,13 +14,11 @@ from mcp.types import TextContent, Tool
 from neoflow.config import Config
 from neoflow.mcp.tools import (
     ASK_CHAT_SCHEMA,
-    GITLAB_LIVE_SEARCH_SCHEMA,
     SEARCH_CODE_SCHEMA,
     SEARCH_DOCUMENTATION_SCHEMA,
     SEARCH_TICKETS_SCHEMA,
     GET_FULL_TICKET_SCHEMA,
     tool_ask_chat,
-    tool_gitlab_live_search,
     tool_search_code,
     tool_search_documentation,
     tool_search_tickets,
@@ -104,16 +102,6 @@ def create_mcp_server(config: Config | None = None) -> Server:
                 ),
                 inputSchema=GET_FULL_TICKET_SCHEMA,
             ),
-            Tool(
-                name="gitlab_live_search",
-                description=(
-                    "Perform real-time search on GitLab repositories via API. "
-                    "Returns code snippets directly from GitLab with URLs. "
-                    "Use when you need the most up-to-date code from GitLab, "
-                    "or when searching repositories not yet indexed."
-                ),
-                inputSchema=GITLAB_LIVE_SEARCH_SCHEMA,
-            ),
         ]
         
         logger.info(f"Listed {len(tools)} MCP tools")
@@ -148,8 +136,6 @@ def create_mcp_server(config: Config | None = None) -> Server:
                 result = await asyncio.to_thread(tool_search_tickets, config, arguments)
             elif name == "get_full_ticket":
                 result = await asyncio.to_thread(tool_get_full_ticket, config, arguments)
-            elif name == "gitlab_live_search":
-                result = await asyncio.to_thread(tool_gitlab_live_search, config, arguments)
             else:
                 error_msg = f"Unknown tool: {name}"
                 logger.error(error_msg)

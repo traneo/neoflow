@@ -457,7 +457,6 @@ This will be automatically chunked into multiple entries with `chunk_index` and 
 
 ## See Also
 
-- [GitLab Integration](GITLAB_INTEGRATION.md)
 - [Search Features](SEARCH_FEATURES.md)
 - [Configuration](CONFIGURATION.md)
 - [CLI Reference](CLI_REFERENCE.md)

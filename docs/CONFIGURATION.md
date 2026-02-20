@@ -20,7 +20,6 @@ NeoFlow uses a dataclass-based configuration system with support for environment
 
 ```bash
 export WEAVIATE_HOST=localhost
-export GITLAB_TOKEN=your_token
 export LLM_PROVIDER=ollama
 ```
 
@@ -30,7 +29,6 @@ export LLM_PROVIDER=ollama
 # .env
 WEAVIATE_HOST=localhost
 WEAVIATE_PORT=8080
-GITLAB_TOKEN=glpat-...
 LLM_PROVIDER=ollama
 ```
 
@@ -47,7 +45,6 @@ from neoflow.config import Config
 
 config = Config.from_env()
 config.weaviate.host = "custom_host"
-config.gitlab.api_token = "custom_token"
 ```
 
 ### 4. Project-Local Configuration
@@ -113,43 +110,6 @@ IMPORTER_MAX_WORKERS=20
 - `tickets_dir`: Directory containing ticket JSON files
 - `batch_size`: Number of records per batch insert
 - `max_workers`: Parallel workers for processing
-
-### GitLab Configuration
-
-```python
-@dataclass
-class GitLabConfig:
-    base_url: str = "https://gitlab.com/api/v4"
-    api_token: str = ""
-    gitlab_group_path: str = "mygroup/"
-    max_file_size_bytes: int = 1_000_000  # 1MB
-    repos_config_path: str = "gitlab_repos.yaml"
-    allowed_extensions: tuple[str, ...] = (
-        ".py", ".js", ".ts", ".java", ".go", ".md",
-        ".yaml", ".yml", ".json", ".xml", ".sql",
-    )
-    live_search_keywords: tuple[str, ...] = (
-        "gitlab:", "repository:", "repo:", "project:",
-    )
-```
-
-**Environment Variables:**
-```bash
-GITLAB_BASE_URL=https://gitlab.com/api/v4
-GITLAB_TOKEN=glpat-...
-GITLAB_GROUP_PATH=MyOrg/
-GITLAB_MAX_FILE_SIZE_BYTES=1000000
-GITLAB_REPOS_CONFIG=gitlab_repos.yaml
-```
-
-**Description:**
-- `base_url`: GitLab API endpoint
-- `api_token`: Personal access token
-- `gitlab_group_path`: Group path prefix
-- `max_file_size_bytes`: Skip files larger than this
-- `repos_config_path`: Repository configuration file
-- `allowed_extensions`: File types to index
-- `live_search_keywords`: Triggers for live GitLab search
 
 ### Agent Configuration
 
@@ -269,7 +229,6 @@ SERVER_MAX_SESSIONS=100
 class Config:
     weaviate: WeaviateConfig = field(default_factory=WeaviateConfig)
     importer: ImporterConfig = field(default_factory=ImporterConfig)
-    gitlab: GitLabConfig = field(default_factory=GitLabConfig)
     agent: AgentConfig = field(default_factory=AgentConfig)
     chat: ChatConfig = field(default_factory=ChatConfig)
     server: ServerConfig = field(default_factory=ServerConfig)
@@ -290,15 +249,6 @@ Complete list of all environment variables:
 ```bash
 WEAVIATE_HOST=localhost
 WEAVIATE_PORT=8080
-```
-
-### GitLab
-```bash
-GITLAB_BASE_URL=https://gitlab.com/api/v4
-GITLAB_TOKEN=glpat-...
-GITLAB_GROUP_PATH=MyOrg/
-GITLAB_MAX_FILE_SIZE_BYTES=1000000
-GITLAB_REPOS_CONFIG=gitlab_repos.yaml
 ```
 
 ### LLM Provider
@@ -363,7 +313,6 @@ LLM_PROVIDER=ollama
 OLLAMA_API_URL=http://localhost:11434
 OLLAMA_MODEL=qwen3-coder:latest
 
-GITLAB_TOKEN=glpat-local-dev-token
 
 CHAT_SAVE_HISTORY=true
 AGENT_PLANNING_ENABLED=true
@@ -380,9 +329,6 @@ LLM_PROVIDER=vllm
 VLLM_API_URL=http://vllm-cluster:8000
 VLLM_MODEL=meta-llama/Llama-2-13b-chat-hf
 
-GITLAB_BASE_URL=https://gitlab.example.com/api/v4
-GITLAB_TOKEN=glpat-prod-token
-GITLAB_GROUP_PATH=Engineering/
 
 SERVER_HOST=0.0.0.0
 SERVER_PORT=9720
@@ -417,7 +363,6 @@ WEAVIATE_PORT=8080
 OLLAMA_API_URL=http://ollama:11434
 OLLAMA_MODEL=qwen3-coder:latest
 
-GITLAB_TOKEN=${GITLAB_TOKEN}  # From shell
 ```
 
 ### Example 5: Kubernetes
@@ -442,7 +387,6 @@ kind: Secret
 metadata:
   name: neoflow-secrets
 stringData:
-  GITLAB_TOKEN: "glpat-..."
   OPENAI_API_KEY: "sk-..."
 ```
 
@@ -484,7 +428,6 @@ config = Config.from_env()
 
 # Avoid
 config = Config()
-config.gitlab.api_token = "hardcoded-token"
 ```
 
 ### 2. Separate Dev/Prod Configs
@@ -518,7 +461,6 @@ Add to `.gitignore`:
 ```bash
 # .env.example
 WEAVIATE_HOST=localhost
-GITLAB_TOKEN=your_token_here
 LLM_PROVIDER=ollama
 ```
 
@@ -527,15 +469,8 @@ LLM_PROVIDER=ollama
 ```python
 config = Config.from_env()
 
-# Validate critical settings
-assert config.weaviate.host, "WEAVIATE_HOST required"
-if config.gitlab.api_token:
-    assert config.gitlab.api_token.startswith("glpat-"), "Invalid GitLab token"
-```
-
 ## See Also
 
 - [LLM Providers](LLM_PROVIDERS.md)
-- [GitLab Integration](GITLAB_INTEGRATION.md)
 - [CLI Reference](CLI_REFERENCE.md)
 - [Deployment](DEPLOYMENT.md)

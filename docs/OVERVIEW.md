@@ -10,7 +10,6 @@
 
 ## Overview
 
-NeoFlow is an advanced AI-powered development assistant that streamlines the software development process through intelligent automation. It combines large language models (LLMs), vector databases, and GitLab integration to provide contextual assistance throughout the development lifecycle.
 
 The system is designed to help developers with:
 - **Code Generation & Analysis**: Generate code snippets and full implementations from natural language
@@ -18,7 +17,6 @@ The system is designed to help developers with:
 - **Testing Support**: Generate test cases and assist with test automation
 - **Project Management**: Organize and manage development tasks intelligently
 - **Code Search**: Perform semantic and hybrid searches across codebases
-- **GitLab Integration**: Seamless integration with GitLab repositories for code context
 
 ## Architecture
 
@@ -51,9 +49,6 @@ NeoFlow is built on a modular architecture with the following key components:
 │  │ Weaviate Vector DB │  │
 │  └────────────────────┘  │
 │  ┌────────────────────┐  │
-│  │  GitLab Indexer    │  │
-│  └────────────────────┘  │
-│  ┌────────────────────┐  │
 │  │  Ticket Importer   │  │
 │  └────────────────────┘  │
 └──────────────────────────┘
@@ -68,7 +63,6 @@ NeoFlow is built on a modular architecture with the following key components:
 5. **Search Engine** - Semantic and hybrid search across multiple data sources
 6. **LLM Providers** - Pluggable backend support (Ollama, vLLM, OpenAI)
 7. **Vector Database** - Weaviate for semantic search and retrieval
-8. **GitLab Integration** - Repository indexing and live search
 9. **Data Importers** - Ticket and documentation import systems
 
 ## Key Features
@@ -91,10 +85,8 @@ Interactive conversation with:
 
 ### 3. Search Capabilities
 Powerful search across:
-- Code repositories (indexed from GitLab)
 - Documentation
 - Support tickets
-- Live GitLab search
 - Global workspace search
 - File system operations
 
@@ -106,15 +98,6 @@ Production-ready API with:
 - Health monitoring
 - CORS support
 - Session cleanup
-
-### 5. GitLab Integration
-Seamless repository integration:
-- Automatic code indexing
-- Smart chunking with context
-- Import/definition extraction
-- Test code detection
-- Incremental updates
-- Live search fallback
 
 ### 6. Template System
 Reusable query templates:
@@ -138,7 +121,6 @@ Flexible LLM backends:
 - Python 3.12 or higher
 - Docker and Docker Compose
 - GPU with CUDA support (recommended)
-- GitLab access token (for repository integration)
 
 ### Quick Start
 
@@ -178,9 +160,6 @@ NeoFlow uses environment variables and defaults from [config.py](../neoflow/conf
 export WEAVIATE_HOST=localhost
 export WEAVIATE_PORT=8080
 
-# GitLab integration
-export GITLAB_TOKEN=your_token_here
-export GITLAB_GROUP_PATH=your_group/
 
 # LLM provider selection
 export LLM_PROVIDER=ollama  # or vllm, openai, auto
@@ -199,7 +178,6 @@ See [Configuration Guide](CONFIGURATION.md) for detailed options.
 
 ### Search & Data
 - [Search Features](SEARCH_FEATURES.md) - Semantic and hybrid search capabilities
-- [GitLab Integration](GITLAB_INTEGRATION.md) - Repository indexing and search
 - [Data Import](DATA_IMPORT.md) - Ticket and document import system
 
 ### Backend & Integration
@@ -253,7 +231,6 @@ See [Configuration Guide](CONFIGURATION.md) for detailed options.
 - Read the [CLI Reference](CLI_REFERENCE.md) to learn all available commands
 - Explore [Agent System](AGENT_SYSTEM.md) for autonomous task execution
 - Review [Configuration](CONFIGURATION.md) for customization options
-- Check [GitLab Integration](GITLAB_INTEGRATION.md) for repository setup
 - See [API Server](API_SERVER.md) for programmatic access
 
 ## Support

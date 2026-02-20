@@ -5,7 +5,6 @@ Defines the schemas and wrapper functions for all MCP tools:
 - search_code: Search indexed code repositories
 - search_documentation: Search documentation
 - search_tickets: Search tickets/issues
-- gitlab_live_search: Real-time GitLab code search
 """
 
 import logging
@@ -17,7 +16,6 @@ from rich.console import Console
 from neoflow.chat import run_chat
 from neoflow.config import Config
 from neoflow.search.tools import (
-    gitlab_live_search,
     search_code,
     search_documentation,
     search_tickets,
@@ -138,29 +136,6 @@ GET_FULL_TICKET_SCHEMA = {
     },
     "required": ["reference"],
 }
-
-GITLAB_LIVE_SEARCH_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "query": {
-            "type": "string",
-            "description": "The search query text to find in GitLab repositories",
-        },
-        "repository": {
-            "type": "string",
-            "description": "Specific repository path (e.g., 'group/repo') to search (optional)",
-        },
-        "limit": {
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 20,
-            "default": 10,
-            "description": "Maximum number of results to return",
-        },
-    },
-    "required": ["query"],
-}
-
 
 # Tool wrapper functions
 def tool_ask_chat(config: Config, arguments: dict[str, Any]) -> str:
@@ -317,31 +292,3 @@ def tool_get_full_ticket(config: Config, arguments: dict[str, Any]) -> str:
         logger.error(f"get_full_ticket tool failed: {e}", exc_info=True)
         return f"Error: {str(e)}"
 
-
-def tool_gitlab_live_search(config: Config, arguments: dict[str, Any]) -> str:
-    """Execute the gitlab_live_search tool - real-time GitLab code search.
-    
-    Args:
-        config: Application configuration
-        arguments: Tool arguments (query, repository, limit)
-    
-    Returns:
-        Formatted GitLab search results
-    """
-    query = arguments["query"]
-    repository = arguments.get("repository")
-    limit = arguments.get("limit", 10)
-    
-    logger.info(f"MCP gitlab_live_search: {query[:100]}...")
-    
-    try:
-        result = gitlab_live_search(
-            query=query,
-            config=config,
-            repository=repository,
-            limit=limit,
-        )
-        return result
-    except Exception as e:
-        logger.error(f"gitlab_live_search tool failed: {e}", exc_info=True)
-        return f"Error: {str(e)}"

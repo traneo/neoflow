@@ -37,7 +37,7 @@ async def create_session(
     Each session has a unique ID and can be configured with different settings.
 
     **Parameters:**
-    - **include_code**: Enable GitLab code search for all queries in this session
+    - **include_code**: Enable code search for all queries in this session
     - **save_history**: Save conversation history to disk when session ends
 
     **Returns:**

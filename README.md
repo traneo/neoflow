@@ -12,7 +12,6 @@ NeoFlow is an AI-powered development assistant designed to streamline the softwa
 - **Documentation Assistance**: Create and maintain project documentation with AI-powered content generation
 - **Testing Support**: Generate test cases and assist with test automation
 - **Project Management**: Help organize and manage development projects with intelligent task suggestions
-- **GitLab Integration**: Integration with GitLab for code search and project context
 - **Multi-turn Conversations**: Maintain context through session-based chat interactions
 - **Template System**: Predefined query templates for common development tasks
 - **MCP Server**: Model Context Protocol server for integration with AI coding assistants (VS Code, Claude Desktop, Cursor)
@@ -98,7 +97,7 @@ neoflow server --mcp
 neoflow server --proxy --remote-url http://server.example.com:9721
 ```
 
-Exposes NeoFlow's capabilities to AI coding assistants like VS Code with GitHub Copilot, Claude Desktop, and Cursor IDE. See [docs/MCP_INTEGRATION.md](docs/MCP_INTEGRATION.md) for setup instructions.
+Exposes NeoFlow's capabilities to AI coding assistants like VS Code with GitHub Copilot, Claude Desktop, and Cursor IDE.
 
 For more commands and options:
 ```bash
@@ -118,15 +117,12 @@ See [docs/VLLM_SETUP.md](docs/VLLM_SETUP.md) for detailed vLLM configuration.
 
 Comprehensive documentation is available in the [docs/](docs/) directory:
 
-- **[Overview](docs/OVERVIEW.md)** - Architecture and detailed feature explanations
-- **[CLI Reference](docs/CLI_REFERENCE.md)** - Complete command reference
-- **[MCP Integration](docs/MCP_INTEGRATION.md)** - Model Context Protocol server for AI coding assistants
 - **[Agent System](docs/AGENT_SYSTEM.md)** - Autonomous task execution
-- **[Chat System](docs/CHAT_SYSTEM.md)** - Interactive conversation mode
-- **[Search Features](docs/SEARCH_FEATURES.md)** - Semantic search capabilities
-- **[GitLab Integration](docs/GITLAB_INTEGRATION.md)** - Repository indexing guide
 - **[API Server](docs/API_SERVER.md)** - REST API documentation
-- **[Configuration](docs/CONFIGURATION.md)** - Complete configuration reference
+- **[LLM Providers](docs/LLM_PROVIDERS.md)** - LLM backend options
+- **[Template System](docs/TEMPLATE_SYSTEM.md)** - Reusable query templates
+- **[Loop Detection](docs/LOOP_DETECTION.md)** - Agent loop safeguards
+- **[Dictionary Compression](docs/DICTIONARY_COMPRESSION.md)** - Context compression details
 
 See [docs/README.md](docs/README.md) for the full documentation index.
 

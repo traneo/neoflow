@@ -18,7 +18,6 @@ Welcome to the NeoFlow documentation! This directory contains comprehensive guid
 
 ### Search & Data
 - **[Search Features](SEARCH_FEATURES.md)** - Semantic and hybrid search capabilities
-- **[GitLab Integration](GITLAB_INTEGRATION.md)** - Repository indexing and code search
 - **[Data Import](DATA_IMPORT.md)** - Ticket and document import system
 - **[Database Management](DB_COMMANDS.md)** - Database collection management
 
@@ -38,7 +37,6 @@ Welcome to the NeoFlow documentation! This directory contains comprehensive guid
 | Execute a task | [Agent System](AGENT_SYSTEM.md) |
 | Start the API server | [API Server](API_SERVER.md) |
 | Start the MCP server | [MCP Integration](MCP_INTEGRATION.md) |
-| Index GitLab repos | [GitLab Integration](GITLAB_INTEGRATION.md) |
 | Configure LLM provider | [LLM Providers](LLM_PROVIDERS.md) |
 | Create templates | [Template System](TEMPLATE_SYSTEM.md) |
 | Import ticket data | [Data Import](DATA_IMPORT.md) |
@@ -66,7 +64,6 @@ docs/
 ├── API_SERVER.md                # REST API documentation
 ├── MCP_INTEGRATION.md           # Model Context Protocol integration
 ├── SEARCH_FEATURES.md           # Search capabilities
-├── GITLAB_INTEGRATION.md        # GitLab integration guide
 ├── DATA_IMPORT.md               # Data import guide
 ├── DB_COMMANDS.md               # Database management commands
 ├── LLM_PROVIDERS.md             # LLM provider documentation
@@ -98,7 +95,6 @@ Interactive conversations with search integration. Great for:
 
 ### 🔍 Search Features
 Powerful semantic search across:
-- Code repositories (GitLab)
 - Documentation
 - Support tickets
 - Workspace files
@@ -114,14 +110,6 @@ Production-ready HTTP API with:
 
 [Read API Server docs →](API_SERVER.md)
 
-### 🦊 GitLab Integration
-Seamless repository indexing:
-- Automatic code indexing
-- Smart chunking
-- Metadata extraction
-- Live search fallback
-
-[Read GitLab Integration docs →](GITLAB_INTEGRATION.md)
 
 ### 🧠 Multi-Provider LLM
 Flexible backend support:
@@ -175,9 +163,6 @@ docker compose up -d
 # Import data
 neoflow import --tickets
 
-# Index repositories
-export GITLAB_TOKEN=your_token
-neoflow gitlab --index
 
 # Start using
 neoflow
@@ -215,8 +200,6 @@ curl -X POST http://localhost:9720/api/v1/query \
 export WEAVIATE_HOST=localhost
 export WEAVIATE_PORT=8080
 
-# GitLab
-export GITLAB_TOKEN=glpat-your_token_here
 
 # LLM Provider (choose one)
 export LLM_PROVIDER=ollama
@@ -249,16 +232,6 @@ docker logs neoflow-weaviate-1
 python -m json.tool tickets/ticket_10001.json
 ```
 
-**GitLab indexing fails:**
-```bash
-# Verify token
-echo $GITLAB_TOKEN
-
-# Test API access
-curl -H "PRIVATE-TOKEN: $GITLAB_TOKEN" \
-  https://gitlab.com/api/v4/user
-```
-
 **LLM provider issues:**
 ```bash
 # Check Ollama
@@ -278,7 +251,6 @@ Each documentation file includes a troubleshooting section:
 - [Chat System Troubleshooting](CHAT_SYSTEM.md#troubleshooting)
 - [Agent System Troubleshooting](AGENT_SYSTEM.md#troubleshooting)
 - [Search Features Troubleshooting](SEARCH_FEATURES.md#troubleshooting)
-- [GitLab Integration Troubleshooting](GITLAB_INTEGRATION.md#troubleshooting)
 - [Data Import Troubleshooting](DATA_IMPORT.md#troubleshooting)
 - [LLM Providers Troubleshooting](LLM_PROVIDERS.md#troubleshooting)
 

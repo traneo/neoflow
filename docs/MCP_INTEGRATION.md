@@ -25,7 +25,6 @@ The Model Context Protocol (MCP) is an open protocol that standardizes how AI ap
 - **Resources**: Data sources that provide context to LLMs  
 - **Prompts**: Reusable prompt templates
 
-NeoFlow implements MCP to expose its search capabilities as tools that AI assistants can use to search your codebase, documentation, tickets, and GitLab repositories.
 
 ---
 
@@ -37,7 +36,6 @@ NeoFlow implements MCP to expose its search capabilities as tools that AI assist
 - `search_documentation` - Documentation search
 - `search_tickets` - Ticket/issue search
 - `get_full_ticket` - Retrieve complete ticket details with all comments
-- `gitlab_live_search` - Real-time GitLab API search
 
 ✅ **Universal Integration**
 - Works with VS Code + GitHub Copilot
@@ -67,7 +65,6 @@ NeoFlow implements MCP to expose its search capabilities as tools that AI assist
 3. **Indexed Data**
   - Import code: `neoflow import --zip /path/to/repo.zip --name repo-name`
   - Import docs: `neoflow import --docs /path/to/docs`
-  - Index GitLab: `neoflow gitlab --index`
 
 4. **MCP Client**
    - VS Code with GitHub Copilot extension, or
@@ -146,7 +143,6 @@ export MCP_AUTH_TOKEN=your-token        # Auth token if required
 # NeoFlow Configuration
 export WEAVIATE_HOST=localhost
 export WEAVIATE_PORT=8080
-export GITLAB_TOKEN=your-gitlab-token
 export LLM_PROVIDER=ollama              # or openai, vllm
 export OLLAMA_MODEL=glm-4.7-flash
 ```
@@ -297,16 +293,6 @@ How does authentication work in this project? Show me the implementation.
 
 ---
 
-### 6. gitlab_live_search
-
-**Description:** Real-time search on GitLab repositories via API (not indexed).
-
-**When to use:**
-- Need the most up-to-date code
-- Searching repositories not yet indexed
-- Looking for recent changes
-- Verifying current implementations
-
 **Parameters:**
 - `query` (string, required): Search query
 - `repository` (string, optional): Specific repository (e.g., "group/repo")
@@ -344,7 +330,6 @@ How does authentication work in this project? Show me the implementation.
          "env": {
            "PYTHONUNBUFFERED": "1",
            "WEAVIATE_HOST": "localhost",
-           "GITLAB_TOKEN": "your-token"
          }
        }
      }
@@ -478,19 +463,6 @@ Configuration format:
 2. Calls `search_code` for payment processing implementation
 3. Combines findings to explain likely causes
 4. References specific tickets and code locations
-
----
-
-### Example 4: Finding Recent Changes
-
-**Prompt to AI Assistant:**
-> What are the latest changes to the API authentication in GitLab?
-
-**What happens:**
-1. AI assistant calls `gitlab_live_search`
-2. Gets real-time results from GitLab
-3. Shows recent code with URLs
-4. AI explains the changes
 
 ---
 
@@ -780,8 +752,6 @@ The `ask_chat` tool is the most powerful and user-friendly. It automatically:
 Regularly update indexed data:
 
 ```bash
-# Refresh GitLab repositories
-neoflow gitlab --refresh
 
 # Re-import updated documentation
 neoflow import --docs /path/to/docs
@@ -824,7 +794,6 @@ tail -f ~/.neoflow/logs/mcp.log
 
 - **Local Use Only**: MCP stdio transport is designed for local use
 - **Sensitive Data**: Be aware tools can access all indexed data
-- **GitLab Tokens**: Keep GITLAB_TOKEN secure
 - **Authentication**: Enable auth for shared environments
 
 ---
@@ -833,7 +802,6 @@ tail -f ~/.neoflow/logs/mcp.log
 
 1. **Index Your Data**
    - Import your code repositories
-   - Index GitLab repositories
    - Import documentation
 
 2. **Configure Your Client**

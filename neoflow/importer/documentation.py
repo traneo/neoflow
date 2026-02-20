@@ -8,7 +8,7 @@ from weaviate.classes.config import Configure
 from weaviate.config import AdditionalConfig, Timeout
 
 from neoflow.config import Config
-from neoflow.gitlab.indexer import _chunk_content
+from neoflow.importer.code_indexer import chunk_content
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +83,7 @@ def import_documentation(doc_path: str, config: Config):
                 skipped += 1
                 continue
 
-            chunks = _chunk_content(content, config.llm_provider.chunk_size_bytes)
+            chunks = chunk_content(content, config.llm_provider.chunk_size_bytes)
             for chunk in chunks:
                 collection.data.insert(
                     properties={

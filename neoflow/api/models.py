@@ -9,12 +9,12 @@ class QueryRequest(BaseModel):
     """Request model for simple query endpoint."""
     query: str = Field(..., description="The search query", min_length=1)
     project_keyword: str = Field(default="", description="Project name or keyword to filter by")
-    include_code: bool = Field(default=False, description="Include GitLab code search results")
+    include_code: bool = Field(default=False, description="Include code search results")
 
 
 class SessionCreateRequest(BaseModel):
     """Request model for creating a new session."""
-    include_code: bool = Field(default=False, description="Include GitLab code search in this session")
+    include_code: bool = Field(default=False, description="Include code search in this session")
     save_history: bool = Field(default=True, description="Save conversation history on session end")
 
 
@@ -72,7 +72,6 @@ class HealthResponse(BaseModel):
     status: str = Field(..., description="Overall status: 'healthy' or 'degraded'")
     weaviate: bool = Field(..., description="Weaviate connection status")
     ollama: bool = Field(..., description="Ollama connection status")
-    gitlab: bool = Field(..., description="GitLab token availability")
 
 
 class TemplateInfo(BaseModel):

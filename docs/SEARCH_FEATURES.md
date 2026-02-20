@@ -29,7 +29,6 @@ NeoFlow provides powerful search capabilities across code, documentation, and su
 
 ### 1. Code Search
 
-Search indexed GitLab repositories.
 
 **Data Indexed:**
 - Source code files
@@ -86,9 +85,7 @@ Search all workspace files (not just indexed).
 - Locating specific text strings
 - Quick workspace exploration
 
-### 5. GitLab Live Search
 
-Real-time search in GitLab repositories (fallback when not indexed).
 
 **Best For:**
 - Searching repositories not yet indexed
@@ -307,15 +304,6 @@ Updated the token validation logic...
 
 **Note:** Always use `get_full_ticket` after finding relevant tickets to see the complete conversation and all details.
 
-### gitlab_live_search
-
-```json
-{
-  "action": "gitlab_live_search",
-  "keywords": ["authentication", "JWT"],
-  "repos": ["backend-api"]
-}
-```
 
 ## Best Practices
 
@@ -449,9 +437,8 @@ Weaviate caches frequently accessed results.
 ### No Results
 
 **Check:**
-1. Is data indexed? `neoflow gitlab --index`
-2. Is Weaviate running? `docker ps`
-3. Try broader query
+1. Is Weaviate running? `docker ps`
+2. Try broader query
 
 ### Irrelevant Results
 
@@ -476,6 +463,5 @@ Hybrid search balances semantic + keyword. If results seem off:
 
 ## See Also
 
-- [GitLab Integration](GITLAB_INTEGRATION.md)
 - [Data Import](DATA_IMPORT.md)
 - [Configuration](CONFIGURATION.md)
