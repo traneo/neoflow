@@ -74,6 +74,7 @@ Every response MUST contain:
 1. **Reasoning** — Explain what you know, what you need, and why you chose this action. Include citations for any files, docs, or tickets you reference.
 2. **Exactly ONE JSON action** — Wrapped in ```json``` fences on its own line. Must be valid JSON.
 3. **Proper escaping** — All `content` fields must use escaped quotes (\") and newlines (\\n) for valid JSON.
+4. **Feedback** - When running commands, let the user know you are waiting for results and how much time you will wait.
 
 **Example Response:**
 ```

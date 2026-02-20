@@ -37,6 +37,7 @@ Each system prompt file should follow this format:
 - **qa.md** - Software architecture and security review
 - **test_cases.md** - Test case generation and QA guidance
 - **online.md** - Online/web-specific development
+- **page_crawler.md** - CLI-only static/dynamic page crawling and content extraction for Q&A
 
 ## Creating Custom Prompts
 

@@ -64,6 +64,22 @@ class TaskExecutor:
         if self.current_task_list:
             self.current_task_list.add_resolution(task_id, task_description, resolution, notes)
             logger.info(f"Recorded resolution for task {task_id}")
+
+    def get_previous_resolutions_context(self) -> str:
+        """Build context text containing resolutions from completed tasks.
+
+        Returns:
+            Formatted text suitable for appending to the next task prompt.
+        """
+        if not self.current_task_list or not self.current_task_list.resolutions:
+            return "No previous task resolutions yet."
+
+        lines = ["Previous completed task resolutions:"]
+        for res in self.current_task_list.resolutions:
+            lines.append(f"- {res.task_id}: {res.task_description}")
+            lines.append(f"  Result: {res.resolution}")
+
+        return "\n".join(lines)
     
     def get_pending_tasks(self) -> list[dict]:
         """Get list of pending (incomplete) tasks.

@@ -97,9 +97,13 @@ def run_agent(task: str, config: Config, console: Console, bar: StatusBar | None
                 # console.print(task_queue.system_prompt, style="dim")
                 # sleep(5)  # Brief pause for readability
 
+                previous_resolutions_context = ""
+                if should_track_tasks and task_executor.current_task_list:
+                    previous_resolutions_context = task_executor.get_previous_resolutions_context()
+
                 messages = [
                     {"role": "system", "content": task_queue.system_prompt},
-                    {"role": "user", "content": f"Execute this task:\n{task_desc}\n\nWorking directory: {os.getcwd()}"},
+                    {"role": "user", "content": f"Execute this task:\n{task_desc}\n\n{previous_resolutions_context}\n\nWorking directory: {os.getcwd()}"},
                 ]
                 # Reset token/message counts for fresh context
                 with bar._lock:
