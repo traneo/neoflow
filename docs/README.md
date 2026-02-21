@@ -163,6 +163,9 @@ docker compose up -d
 # Import data
 neoflow import --tickets
 
+# Optional: import from a custom ticket directory
+IMPORTER_TICKETS_DIR=./my_tickets neoflow import --tickets
+
 
 # Start using
 neoflow
@@ -227,6 +230,9 @@ docker compose restart
 ```bash
 # Check Weaviate
 docker logs neoflow-weaviate-1
+
+# Check importer directory setting
+echo "$IMPORTER_TICKETS_DIR"
 
 # Verify JSON files
 python -m json.tool tickets/ticket_10001.json

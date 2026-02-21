@@ -82,6 +82,17 @@ neoflow
 neoflow search -q "your search query"
 ```
 
+### Import Tickets
+```bash
+neoflow import --tickets
+```
+
+Use importer environment variables to customize ticket import behavior:
+
+```bash
+IMPORTER_TICKETS_DIR=./my_tickets IMPORTER_BATCH_SIZE=100 IMPORTER_MAX_WORKERS=8 neoflow import --tickets
+```
+
 ### Server Mode (REST API)
 ```bash
 neoflow server --rest

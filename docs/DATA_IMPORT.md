@@ -14,13 +14,13 @@ Guide to importing tickets and documents into NeoFlow's vector database.
 
 ## Overview
 
-NeoFlow can import structured data (support tickets, bug reports, documentation) into Weaviate for semantic search.
+NeoFlow can import structured data (support tickets and documentation files) into Weaviate for semantic search.
 
 ### Supported Data Types
 
-- **Tickets**: Support tickets with questions and comments
-- **Documents**: Any structured JSON content
-- **Custom**: Extend for your own data types
+- **Tickets**: Support tickets from JSON files
+- **Documentation**: Files from a docs directory via `neoflow import --docs <path>`
+- **Code Repositories**: ZIP or source folder indexing via `neoflow import --zip/--source`
 
 ## Ticket Import
 
@@ -32,22 +32,23 @@ Tickets must be in JSON format:
 
 ```json
 {
-  "reference": "TICKET-10001",
   "question": "How do I implement JWT authentication in the API?",
   "metadata": {
     "title": "JWT Authentication Setup",
-    "url": "https://support.example.com/ticket/10001"
+    "url": "https://support.example.com/ticket/sdk-10001"
   },
   "comments": [
-    {
-      "message": "You need to install the PyJWT library first..."
-    },
-    {
-      "message": "Here's a complete example implementation..."
-    }
+    "You need to install the PyJWT library first...",
+    "Here's a complete example implementation..."
   ]
 }
 ```
+
+### Ticket Model Notes
+
+- `reference` is derived from the last URL segment in `metadata.url` (for example: `.../sdk-10001` → `sdk-10001`)
+- `comments` must be a list of strings
+- `question` is optional, but recommended for better retrieval
 
 ### Weaviate Schema
 
@@ -80,7 +81,7 @@ References:
 
 Large tickets/comments are automatically chunked:
 
-- **Chunk Size**: ~3000 bytes
+- **Chunk Size**: 3000 characters (approximate byte-equivalent for typical ASCII text)
 - **No Overlap**: Comments are independent
 - **Metadata Preserved**: Each chunk links to parent ticket
 
@@ -96,7 +97,7 @@ Large tickets/comments are automatically chunked:
    ├── Validate Schema
    ├── Check Size → Chunk if needed
    ├── Insert Ticket
-   └── Insert Comments (linked to ticket)
+  └── Insert Comments (tagged with same `reference`)
    ↓
 3. Import Complete
 ```
@@ -126,16 +127,32 @@ Imports from default `tickets/` directory.
 ### Custom Directory
 
 ```bash
-neoflow import --tickets
+IMPORTER_TICKETS_DIR=./my_tickets neoflow import --tickets
+```
+
+Or set it in `.env`:
+
+```env
+IMPORTER_TICKETS_DIR=./my_tickets
 ```
 
 ### Custom Batch Size
 
 ```bash
-neoflow import --tickets
+IMPORTER_BATCH_SIZE=100 neoflow import --tickets
 ```
 
-Default is 300. Adjust based on:
+### Custom Worker Count
+
+```bash
+IMPORTER_MAX_WORKERS=8 neoflow import --tickets
+```
+
+Defaults:
+- `IMPORTER_BATCH_SIZE=300`
+- `IMPORTER_MAX_WORKERS=20`
+
+Tune based on:
 - Available memory
 - Ticket size
 - Import speed needs
@@ -209,9 +226,11 @@ def clean_ticket(ticket_data):
     # Remove HTML
     ticket_data['question'] = re.sub(r'<[^>]+>', '', ticket_data['question'])
     
-    # Clean comments
-    for comment in ticket_data.get('comments', []):
-        comment['message'] = re.sub(r'<[^>]+>', '', comment['message'])
+  # Clean comments (list[str])
+  ticket_data['comments'] = [
+    re.sub(r'<[^>]+>', '', comment)
+    for comment in ticket_data.get('comments', [])
+  ]
     
     return ticket_data
 
@@ -231,13 +250,11 @@ for ticket_file in Path('tickets').glob('*.json'):
 For large datasets:
 
 ```bash
-# Process in batches
-neoflow import --tickets
-neoflow import --tickets
-# etc.
+# Lower concurrency to reduce memory pressure
+IMPORTER_BATCH_SIZE=100 IMPORTER_MAX_WORKERS=6 neoflow import --tickets
 ```
 
-**Note:** Each import recreates collections, so this approach is only useful for testing different batches separately.
+**Note:** Each import recreates collections, so use tuning vars instead of repeated partial imports.
 
 ### 5. Backup Before Import
 
@@ -354,8 +371,9 @@ else:
 - Out of memory errors
 
 **Solutions:**
-1. Reduce batch size: `--batch-size 100`
-2. Increase Weaviate memory in docker-compose.yaml:
+1. Reduce batch size: `IMPORTER_BATCH_SIZE=100`
+2. Reduce parallelism: `IMPORTER_MAX_WORKERS=6`
+3. Increase Weaviate memory in docker-compose.yaml:
    ```yaml
    weaviate:
      environment:
@@ -365,15 +383,16 @@ else:
          limits:
            memory: 4G
    ```
-3. Import in smaller batches
+4. Re-run import after tuning settings
 
 ### Slow Import
 
 **Optimize:**
-1. Increase batch size (if memory allows)
-2. Use faster embedding model
-3. Disable logging during import
-4. Check disk I/O (use SSD)
+1. Increase batch size (if memory allows): `IMPORTER_BATCH_SIZE=500`
+2. Increase workers (if CPU/network allows): `IMPORTER_MAX_WORKERS=30`
+3. Use faster embedding model
+4. Disable logging during import
+5. Check disk I/O (use SSD)
 
 ### Duplicate Data
 
@@ -385,31 +404,19 @@ else:
 3. Restart Weaviate
 4. Re-import
 
-### Missing Relationships
-
-**Symptoms:** Comments not linked to tickets
-
-**Check:**
-1. Comment `hasTicket` relationship is set
-2. Ticket UUID is correct
-3. Comments collection has reference property
-
 ## Examples
 
 ### Example 1: Simple Ticket
 
 ```json
 {
-  "reference": "BUG-101",
   "question": "Application crashes when clicking logout",
   "metadata": {
     "title": "Logout Bug",
-    "url": "https://issues.example.com/BUG-101"
+    "url": "https://issues.example.com/sdk-101"
   },
   "comments": [
-    {
-      "message": "This is a known issue with the session cleanup. Fix in progress."
-    }
+    "This is a known issue with the session cleanup. Fix in progress."
   ]
 }
 ```
@@ -418,19 +425,14 @@ else:
 
 ```json
 {
-  "reference": "FEATURE-202",
   "question": "Add support for OAuth2 authentication in addition to JWT",
   "metadata": {
     "title": "OAuth2 Support Request",
-    "url": "https://issues.example.com/FEATURE-202"
+    "url": "https://issues.example.com/sdk-202"
   },
   "comments": [
-    {
-      "message": "We're evaluating this feature. OAuth2 would require significant changes to our auth flow."
-    },
-    {
-      "message": "Implementation plan: 1. Add OAuth2 library..."
-    }
+    "We're evaluating this feature. OAuth2 would require significant changes to our auth flow.",
+    "Implementation plan: 1. Add OAuth2 library..."
   ]
 }
 ```
@@ -439,16 +441,13 @@ else:
 
 ```json
 {
-  "reference": "ISSUE-303",
   "question": "Very long question text that exceeds 3000 bytes... [continues for many paragraphs]",
   "metadata": {
     "title": "Complex Issue",
-    "url": "https://issues.example.com/ISSUE-303"
+    "url": "https://issues.example.com/sdk-303"
   },
   "comments": [
-    {
-      "message": "Even longer comment with detailed technical explanation... [continues]"
-    }
+    "Even longer comment with detailed technical explanation... [continues]"
   ]
 }
 ```
