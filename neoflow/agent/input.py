@@ -12,9 +12,11 @@ from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.document import Document
 from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit.key_binding import KeyBindings
+from rich.console import Console
+from rich.panel import Panel
 
 from neoflow.agent.domains import list_domains
-from neoflow.status_bar import estimate_tokens
+from neoflow.status_bar import estimate_tokens, safe_console_print
 
 # Global context variable to track the current active StatusBar instance
 _active_status_bar: contextvars.ContextVar = contextvars.ContextVar(
@@ -125,21 +127,17 @@ def multiline_prompt(prompt_text: str, is_agent: bool = False) -> str:
             bar.resume()
 
 
-def agent_prompt(message: str, choices: list[str] | None = None, default: str = "") -> str:
-    """Prompt the user with readline-like editing (arrow keys, history).
-
-    Args:
-        message: The prompt text to display.
-        choices: Optional list of valid choices. If provided, the prompt loops
-                 until the user enters one of them.
-        default: Default value returned when the user presses Enter with no input.
-
-    Returns:
-        The user's input string.
-
-    Raises:
-        AgentCancelled: If the user presses Ctrl+C.
-    """
+def _agent_prompt_impl(
+    message: str,
+    choices: list[str] | None = None,
+    default: str = "",
+    console: Console | None = None,
+    status_bar=None,
+    modal_title: str | None = None,
+    modal_body: str | None = None,
+    modal_style: str = "cyan",
+) -> str:
+    """Internal prompt implementation with optional Rich modal rendering."""
     suffix = ""
     if choices:
         suffix = f" [{'/'.join(choices)}]"
@@ -147,24 +145,63 @@ def agent_prompt(message: str, choices: list[str] | None = None, default: str = 
         suffix += f" ({default})"
     suffix += ": "
 
-    # Pause any active status bar to allow prompt_toolkit to work without ANSI conflicts
-    bar = _active_status_bar.get()
-    if bar is not None:
-        bar.pause()
+    if console is not None and choices:
+        body = modal_body or f"[bold]{message}[/bold]"
+        body += "\n\n" + "\n".join(f"• [bold]{choice}[/bold]" for choice in choices)
+        if default:
+            body += f"\n\n[dim]Default: {default}[/dim]"
+        safe_console_print(
+            console,
+            status_bar,
+            Panel(body, title=modal_title or "Action Required", border_style=modal_style),
+        )
 
+    # Pause any active status bar for each prompt attempt to avoid ANSI conflicts.
+    bar = _active_status_bar.get()
     try:
         while True:
-            answer = _agent_session.prompt(HTML(f"<b>{message}</b>{suffix}")).strip()
+            if bar is not None:
+                bar.pause()
+            try:
+                answer = _agent_session.prompt(HTML(f"<b>{message}</b>{suffix}")).strip()
+            finally:
+                if bar is not None:
+                    bar.resume()
+
             if not answer and default:
                 return default
             if choices is None or answer in choices:
                 return answer
     except (KeyboardInterrupt, EOFError):
         raise AgentCancelled()
-    finally:
-        # Resume the status bar after input is complete
-        if bar is not None:
-            bar.resume()
+
+
+def agent_prompt(
+    message: str,
+    choices: list[str] | None = None,
+    default: str = "",
+    console: Console | None = None,
+    status_bar=None,
+    modal_title: str | None = None,
+    modal_body: str | None = None,
+    modal_style: str = "cyan",
+) -> str:
+    """Prompt the user with readline-like editing (arrow keys, history).
+
+    When ``choices`` is provided and a ``console`` is passed, the interaction
+    message is shown in a Rich modal panel; only the short input line remains
+    in terminal scroll.
+    """
+    return _agent_prompt_impl(
+        message,
+        choices=choices,
+        default=default,
+        console=console,
+        status_bar=status_bar,
+        modal_title=modal_title,
+        modal_body=modal_body,
+        modal_style=modal_style,
+    )
 
 
 def run_llm_with_cancel(llm_fn, status_bar=None):

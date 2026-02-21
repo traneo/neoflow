@@ -35,6 +35,8 @@ class AgentConfig:
     compression_enabled: bool = True
     compression_min_tokens: int = 1000  # Minimum tokens to trigger compression
     compression_min_chars: int = 5000   # Minimum characters to trigger compression
+    # Command execution settings
+    unsafe_mode: bool = False  # When True, bypasses run_command approvals and uses shell=True
 
 
 @dataclass
@@ -138,6 +140,7 @@ AGENT_LOOP_PATTERN_LENGTH=10
 AGENT_COMPRESSION_ENABLED=true
 AGENT_COMPRESSION_MIN_TOKENS=1000
 AGENT_COMPRESSION_MIN_CHARS=5000
+AGENT_UNSAFE_MODE=false
 
 # -----------------------
 # Chat Configuration
@@ -235,6 +238,9 @@ CHUNK_SIZE_BYTES=2000
         config.agent.compression_min_chars = int(os.getenv(
             "AGENT_COMPRESSION_MIN_CHARS", config.agent.compression_min_chars
         ))
+        config.agent.unsafe_mode = os.getenv(
+            "AGENT_UNSAFE_MODE", "false"
+        ).lower() in ("true", "1", "yes")
         config.chat.save_history = os.getenv(
             "CHAT_SAVE_HISTORY", "true"
         ).lower() in ("true", "1", "yes")

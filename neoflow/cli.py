@@ -21,6 +21,13 @@ from neoflow.template import load_template, run_template_form, TemplateError
 console = Console()
 
 
+def _confirm_modal(message: str, default: bool = False, title: str = "Confirmation") -> bool:
+    """Show a Rich modal-style confirmation message before collecting yes/no input."""
+    border_style = "yellow" if default is False else "cyan"
+    console.print(Panel(message, title=title, border_style=border_style, expand=False))
+    return Confirm.ask("Select", default=default)
+
+
 def _setup_logging(verbose: bool = False, info : bool = False, stderr_only: bool = False):
     level = logging.DEBUG if verbose else (logging.INFO if info else logging.ERROR)
     # Use stderr console for MCP stdio mode to avoid interfering with JSON-RPC
@@ -116,7 +123,7 @@ def cmd_search(args, config: Config):
     if args.output:
         _save_report(answer, args.output)
     elif not args.query:
-        if Confirm.ask("\nSave response to a file?", default=False):
+        if _confirm_modal("Save response to a file?", default=False, title="Save Response"):
             file_name = Prompt.ask("File name (without extension)")
             _save_report(answer, file_name)
 
@@ -233,7 +240,11 @@ def cmd_config(args, config: Config):
     
     # Check if file exists and prompt for confirmation
     if os.path.isfile(output_path) and not args.force:
-        if not Confirm.ask(f"[yellow]{output_path} already exists. Overwrite?[/yellow]", default=False):
+        if not _confirm_modal(
+            f"[yellow]{output_path} already exists. Overwrite?[/yellow]",
+            default=False,
+            title="Overwrite Existing File",
+        ):
             console.print("[yellow]Operation cancelled.[/yellow]")
             return
     
@@ -468,6 +479,7 @@ def cmd_interactive(args, config: Config):
 [bold green]Model[/bold green]: {config.llm_provider.ollama_model}
 [bold green]Provider [/bold green]: {config.llm_provider.provider}
 [bold green]History[/bold green]: {'on' if config.chat.save_history else 'off'}
+[bold green]Agent Guardrails[/bold green]: {'off' if config.agent.unsafe_mode else 'on'}
 
 Type [bold green]/init[/bold green] to create the local config.
 
@@ -552,6 +564,8 @@ Contact:
             if agent_mode:
                 console.print("[dim]Your messages will now be handled by the agent. "
                               "Type /agent again to switch back to search mode.[/dim]")
+                if config.agent.unsafe_mode:
+                    console.print("[red]Warning: Agent unsafe mode is enabled. Be cautious with commands and file actions.[/red]")
             continue
         elif lower.startswith("/keyword="):
             # Parse /keyword=VALUE <query>

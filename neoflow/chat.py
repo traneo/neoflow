@@ -25,7 +25,7 @@ from neoflow.search.tools import (
     search_tickets,
     get_full_ticket,
 )
-from neoflow.status_bar import StatusBar, estimate_tokens, status_context
+from neoflow.status_bar import StatusBar, estimate_tokens, status_context, safe_console_print
 
 logger = logging.getLogger(__name__)
 
@@ -142,7 +142,7 @@ def run_chat(
                     optimizer.add_message(messages, {"role": "user", "content": prompt_msg})
                 else:
                     # Response seems malformed or empty - ask for proper format
-                    console.print("[yellow]Could not parse response… my brain is speaking Klingon again.[/yellow]")
+                    safe_console_print(console, bar, "[yellow]Could not parse response… my brain is speaking Klingon again.[/yellow]")
                     logger.info("Could not parse an action from the response. Asking agent to retry...")
                     logger.info(reply)
                     retry_msg = (
@@ -198,7 +198,7 @@ def run_chat(
                 if len(first_line) > 80:
                     first_line = first_line[:77] + "..."
                 line_info = f" ({len(result_lines)} lines)" if len(result_lines) > 1 else ""
-                console.print(f"  [dim]{act_name}: {first_line}{line_info}[/dim]")
+                safe_console_print(console, bar, f"  [dim]{act_name}: {first_line}{line_info}[/dim]")
 
             # Feed result back
             result_msg = f"Action result ({act_name}):\n{result}"
@@ -211,7 +211,7 @@ def run_chat(
             bar.increment_messages()
 
         # Max iterations reached — force a final answer
-        console.print("[yellow]Warning: Brain cells at max capacity. Please output wisdom before meltdown.[/yellow]")
+        safe_console_print(console, bar, "[yellow]Warning: Brain cells at max capacity. Please output wisdom before meltdown.[/yellow]")
         bar.set_loading(True, "Generating final answer...")
         force_msg = (
             "You have reached the maximum number of search iterations. "
@@ -261,7 +261,7 @@ def run_chat(
 
     except AgentCancelled:
         if not silent:
-            console.print("\n[bold]Chat cancelled.[/bold]")
+            safe_console_print(console, bar, "\n[bold]Chat cancelled.[/bold]")
         return None
 
 

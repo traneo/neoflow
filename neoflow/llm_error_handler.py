@@ -118,9 +118,13 @@ def handle_llm_request_error(
     console.print()
     try:
         choice = agent_prompt(
-            "How would you like to proceed?",
+            "Choose an action",
             choices=["retry", "abort"],
-            default="retry" if is_connected else "abort"
+            default="retry" if is_connected else "abort",
+            console=console,
+            modal_title="User Action Required",
+            modal_body="[bold]How would you like to proceed?[/bold]\n\nretry) Retry request\nabort) Abort operation",
+            modal_style="red",
         )
         
         if choice == "abort":

@@ -19,7 +19,7 @@ from rich.panel import Panel
 from neoflow.agent.input import run_llm_with_cancel
 from neoflow.config import Config
 from neoflow.prompts import PLANNING_ANALYSIS_PROMPT, PLANNING_GENERATION_PROMPT
-from neoflow.status_bar import StatusBar, estimate_tokens
+from neoflow.status_bar import StatusBar, estimate_tokens, safe_console_print
 
 logger = logging.getLogger(__name__)
 
@@ -109,8 +109,8 @@ class Planner:
             for i, t in enumerate(task_list, 1):
                 display_parts.append(f"{i}. {t}")
 
-        self._console.print()
-        self._console.print(Panel(
+        safe_console_print(self._console, self._bar)
+        safe_console_print(self._console, self._bar, Panel(
             Markdown("\n".join(display_parts)),
             title="Plan",
             border_style="blue",

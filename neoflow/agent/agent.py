@@ -28,9 +28,14 @@ from neoflow.search.tools import (
     search_documentation,
     search_tickets,
 )
-from neoflow.status_bar import StatusBar, estimate_tokens, status_context
+from neoflow.status_bar import StatusBar, estimate_tokens, status_context, safe_console_print as _shared_safe_console_print
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_console_print(console: Console, status_bar: StatusBar | None, *args, **kwargs) -> None:
+    """Print via Rich while temporarily suspending status bar redraws."""
+    _shared_safe_console_print(console, status_bar, *args, **kwargs)
 
 # Tools allowed in agent mode
 _AGENT_TOOLS = {
@@ -67,8 +72,8 @@ def run_agent(task: str, config: Config, console: Console, bar: StatusBar | None
 
     # Compact init line
     domain_info = f" | {', '.join(domain_names)}" if domain_names else ""
-    console.print("\n[bold green]Agent Online: Initiating Shenanigans...[/bold green]")
-    console.print(f"\n[bold]Prompt[/bold]: {cleaned_task} [dim]({config.llm_provider.ollama_model}{domain_info})[/dim]")
+    _safe_console_print(console, bar, "\n[bold green]Agent Online: Initiating Shenanigans...[/bold green]")
+    _safe_console_print(console, bar, f"\n[bold]Prompt[/bold]: {cleaned_task} [dim]({config.llm_provider.ollama_model}{domain_info})[/dim]")
 
     # Use provided bar or create a new one
     if bar is None:
@@ -99,7 +104,7 @@ def run_agent(task: str, config: Config, console: Console, bar: StatusBar | None
     if should_track_tasks:
         bar.set_message("Initializing task list...")
         task_executor.initialize_task_list(cleaned_task)
-        console.print("[cyan]Task list approach detected - tracking resolutions separately[/cyan]")
+        _safe_console_print(console, bar, "[cyan]Task list approach detected - tracking resolutions separately[/cyan]")
 
     # Planning phase: analyze the task and optionally generate a plan
     planner = Planner(config, bar, console)
@@ -117,7 +122,7 @@ def run_agent(task: str, config: Config, console: Console, bar: StatusBar | None
             for i, task_desc in enumerate(task_queue.tasks):
                 bar.start_task(i)
                 task_id = f"task_{i+1}"
-                console.print(f"\n[bold cyan]--- Task {i + 1}/{len(task_queue.tasks)}: {task_desc} ---[/bold cyan]")
+                _safe_console_print(console, bar, f"\n[bold cyan]--- Task {i + 1}/{len(task_queue.tasks)}: {task_desc} ---[/bold cyan]")
                 
                 # console.print(task_queue.system_prompt, style="dim")
                 # sleep(5)  # Brief pause for readability
@@ -174,10 +179,10 @@ def run_agent(task: str, config: Config, console: Console, bar: StatusBar | None
             # All tasks done - synthesize if tracking enabled
             if should_track_tasks and task_executor.current_task_list:
                 bar.set_message("Synthesizing final answer...")
-                console.print("\n[cyan]Synthesizing final answer from all task resolutions...[/cyan]")
+                _safe_console_print(console, bar, "\n[cyan]Synthesizing final answer from all task resolutions...[/cyan]")
                 final_answer = task_executor.get_final_synthesis()
-                console.print()
-                console.print(Panel(
+                _safe_console_print(console, bar)
+                _safe_console_print(console, bar, Panel(
                     Markdown(final_answer),
                     title="Final Synthesis",
                     border_style="green",
@@ -212,7 +217,7 @@ def run_agent(task: str, config: Config, console: Console, bar: StatusBar | None
                     query_confirmation_state,
                 )
     except AgentCancelled:
-        console.print("\n[bold]Agent cancelled.[/bold]")
+        _safe_console_print(console, bar, "\n[bold]Agent cancelled.[/bold]")
     except _AgentDone:
         pass
     finally:
@@ -243,7 +248,7 @@ def _agent_step(
     clean_messages = optimizer.strip_metadata(messages)
     provider = get_provider(config.llm_provider.provider)
     model = getattr(config.llm_provider, f"{provider.get_name()}_model", None)
-    
+
     # Use retry logic with error handling
     response = retry_llm_request(
         lambda: run_llm_with_cancel(
@@ -280,8 +285,8 @@ def _agent_step(
     if display_text and not display_text.startswith("{"):
         # Add reasoning to status bar
         reasoning_preview = display_text[:80] + "..." if len(display_text) > 80 else display_text
-        console.print()
-        console.print(Panel(Markdown(display_text), title="Agent", border_style="magenta"))
+        _safe_console_print(console, status_bar)
+        _safe_console_print(console, status_bar, Panel(Markdown(display_text), title="Agent", border_style="magenta"))
 
     # Parse the JSON action block from the response
     action = parse_action(reply)
@@ -296,7 +301,7 @@ def _agent_step(
             optimizer.add_message(messages, {"role": "user", "content": prompt_msg})
         else:
             # Response seems malformed or empty - ask for proper format
-            console.print("[yellow]Could not parse response… my brain is speaking Klingon again.[/yellow]")
+            _safe_console_print(console, status_bar, "[yellow]Could not parse response… my brain is speaking Klingon again.[/yellow]")
             logger.info("Could not parse an action from the response. Asking agent to retry...")
             logger.info(reply)
             retry_msg = (
@@ -316,7 +321,7 @@ def _agent_step(
     if act_name == "done":
         summary = action.get("summary", "Task completed.")
         status_bar.set_message("Done")
-        console.print(Panel(
+        _safe_console_print(console, status_bar, Panel(
             f"[bold green]{summary}[/bold green]",
             title="Agent Complete",
             border_style="green",
@@ -346,7 +351,7 @@ def _agent_step(
 
     # Display the proposed action (compact single line)
     action_display = _format_action(action)
-    console.print(action_display)
+    _safe_console_print(console, status_bar, action_display)
     
     # Add action to status bar
     primary_key = _ACTION_PRIMARY_PARAM.get(act_name)
@@ -355,11 +360,12 @@ def _agent_step(
         param_val = str(action[primary_key])[:60]
         action_summary = f"{act_name}: {param_val}"
 
-    # Ask for confirmation only for run_command.
+    # Ask for confirmation only for run_command (unless unsafe_mode is enabled).
     if act_name == "run_command":
         global _RUN_COMMANDS_AUTO_APPROVED_SESSION
         needs_confirmation = (
-            not _RUN_COMMANDS_AUTO_APPROVED_SESSION
+            not config.agent.unsafe_mode
+            and not _RUN_COMMANDS_AUTO_APPROVED_SESSION
             and not query_confirmation_state.get("run_command_approved", False)
         )
 
@@ -368,10 +374,21 @@ def _agent_step(
                 "Allow this command?",
                 choices=["y", "n", "a", "/exit"],
                 default="y",
+                console=console,
+                status_bar=status_bar,
+                modal_title="Command Approval Required",
+                modal_body=(
+                    "[bold]Allow this command?[/bold]\n\n"
+                    "y) Yes, run once\n"
+                    "n) No, reject this command\n"
+                    "a) Always allow run_command for this session\n"
+                    "/exit) Exit agent mode"
+                ),
+                modal_style="yellow",
             )
 
             if user_choice == "/exit":
-                console.print("[bold]Exiting agent mode.[/bold]")
+                _safe_console_print(console, status_bar, "[bold]Exiting agent mode.[/bold]")
                 raise _AgentDone()
 
             if user_choice == "n":
@@ -388,7 +405,7 @@ def _agent_step(
             if user_choice == "a":
                 _RUN_COMMANDS_AUTO_APPROVED_SESSION = True
                 query_confirmation_state["run_command_approved"] = True
-                console.print("[green]Auto-approval enabled for run_command in this session.[/green]")
+                _safe_console_print(console, status_bar, "[green]Auto-approval enabled for run_command in this session.[/green]")
             else:
                 query_confirmation_state["run_command_approved"] = True
 
@@ -426,7 +443,7 @@ def _agent_step(
     if len(first_line) > 80:
         first_line = first_line[:77] + "..."
     line_info = f" ({len(result_lines)} lines)" if len(result_lines) > 1 else ""
-    console.print(f"  [dim]= {first_line}{line_info}[/dim]")
+    _safe_console_print(console, status_bar, f"  [dim]= {first_line}{line_info}[/dim]")
 
     result_msg = f"Action result:\n{result}"
     optimizer.add_message(
@@ -516,8 +533,8 @@ def _handle_loop_detection(
     
     # Display loop warning
     severity_color = "red" if loop_result.severity == "critical" else "yellow"
-    console.print()
-    console.print(Panel(
+    _safe_console_print(console, status_bar)
+    _safe_console_print(console, status_bar, Panel(
         f"[{severity_color}]⚠️  Loop Detected: {loop_result.loop_type}[/{severity_color}]\n\n"
         f"{loop_result.description}\n\n"
         "[bold]Suggested Actions:[/bold]\n" +
@@ -529,21 +546,29 @@ def _handle_loop_detection(
     # Pause status bar during user interaction
     status_bar.set_loading(False)
     
-    # Ask user for intervention
-    console.print("\n[bold cyan]What would you like to do?[/bold cyan]")
-    console.print("  [1] Provide guidance to the agent")
-    console.print("  [2] Continue anyway (ignore warning)")
-    console.print("  [3] Abort agent execution")
-    
     try:
-        choice = agent_prompt("Your choice", choices=["1", "2", "3"], default="1")
+        choice = agent_prompt(
+            "Select an option",
+            choices=["1", "2", "3"],
+            default="1",
+            console=console,
+            status_bar=status_bar,
+            modal_title="Loop Intervention Required",
+            modal_body=(
+                "[bold cyan]What would you like to do?[/bold cyan]\n\n"
+                "1) Provide guidance to the agent\n"
+                "2) Continue anyway (ignore warning)\n"
+                "3) Abort agent execution"
+            ),
+            modal_style=severity_color,
+        )
     except AgentCancelled:
         # User pressed Ctrl+C, treat as abort
         choice = "3"
     
     if choice == "1":
         # Get user guidance
-        console.print("\n[cyan]Please provide guidance or information to help the agent:[/cyan]")
+        _safe_console_print(console, status_bar, "\n[cyan]Please provide guidance or information to help the agent:[/cyan]")
         try:
             guidance = agent_prompt("Your guidance (or /exit to abort)")
         except AgentCancelled:
@@ -566,19 +591,19 @@ def _handle_loop_detection(
             # Mark intervention in loop detector
             loop_detector.mark_intervention()
             
-            console.print("[green]✓ Guidance provided to agent[/green]")
+            _safe_console_print(console, status_bar, "[green]✓ Guidance provided to agent[/green]")
         else:
-            console.print("[yellow]No guidance provided, continuing...[/yellow]")
+            _safe_console_print(console, status_bar, "[yellow]No guidance provided, continuing...[/yellow]")
             loop_detector.mark_intervention()
     
     elif choice == "2":
         # Continue anyway
-        console.print("[yellow]Continuing execution (warning ignored)...[/yellow]")
+        _safe_console_print(console, status_bar, "[yellow]Continuing execution (warning ignored)...[/yellow]")
         loop_detector.mark_intervention()
     
     elif choice == "3":
         # Abort
-        console.print("[red]Aborting agent execution.[/red]")
+        _safe_console_print(console, status_bar, "[red]Aborting agent execution.[/red]")
         raise _AgentDone()
 
 
@@ -596,7 +621,7 @@ def _execute_action(action: dict, config: Config, console: Console | None = None
     act = action.get("action")
     try:
         if act == "run_command":
-            return _run_command(action["command"])
+            return _run_command(action["command"], unsafe_mode=config.agent.unsafe_mode)
         elif act == "search_code":
             return search_code(
                 action["query"],
@@ -629,6 +654,7 @@ def _execute_action(action: dict, config: Config, console: Console | None = None
                 options=action.get("options"),
                 allow_freeform=action.get("allow_freeform", True),
                 console=console,
+                status_bar=status_bar,
             )
         elif act == "notebook_search":
             return _notebook_search(action["query"])
@@ -643,16 +669,29 @@ def _execute_action(action: dict, config: Config, console: Console | None = None
 
 
 
-def _run_command(command: str) -> str:
-    args = shlex.split(command)
-    result = subprocess.run(
-        args,
-        shell=False,
-        capture_output=True,
-        text=True,
-        timeout=30,
-        cwd=os.getcwd(),
-    )
+def _run_command(command: str, unsafe_mode: bool = False) -> str:
+    if unsafe_mode:
+        # Unsafe mode: allow shell=True for more flexible command execution
+        Console.warn("[yellow]Running command in unsafe mode (shell=True)[/yellow]")
+        result = subprocess.run(
+            command,
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            cwd=os.getcwd(),
+        )
+    else:
+        # Safe mode: parse command and execute without shell
+        args = shlex.split(command)
+        result = subprocess.run(
+            args,
+            shell=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            cwd=os.getcwd(),
+        )
     output = ""
     if result.stdout:
         output += result.stdout
@@ -668,6 +707,7 @@ def _ask_user(
     options: list[str] | None = None,
     allow_freeform: bool = True,
     console: Console | None = None,
+    status_bar: StatusBar | None = None,
 ) -> str:
     """Prompt the user for clarification/help and return the captured response."""
     normalized_options = [str(opt) for opt in (options or []) if str(opt).strip()]
@@ -679,8 +719,8 @@ def _ask_user(
             body += "\n\n" + "\n".join(option_lines)
             if allow_freeform:
                 body += "\n[f] Enter a custom response"
-        console.print()
-        console.print(Panel(body, title="Agent Needs User Input", border_style="cyan"))
+        _safe_console_print(console, status_bar)
+        _safe_console_print(console, status_bar, Panel(body, title="Agent Needs User Input", border_style="cyan"))
 
     if normalized_options:
         choices = [str(idx) for idx in range(1, len(normalized_options) + 1)]

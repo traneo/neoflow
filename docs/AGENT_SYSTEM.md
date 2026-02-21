@@ -277,12 +277,29 @@ Retrieve complete ticket details with all comments.
 ### Shell Operations
 
 #### run_command
-Execute shell commands.
+Execute shell commands. By default, commands require user approval and run with `shell=False` for safety.
+
+**Safety Behavior:**
+- Default mode: Each command requires user approval (y/n/approve-all/exit)
+- With `AGENT_UNSAFE_MODE=true`: All approvals bypassed, commands run with `shell=True` for full shell features
+
 ```json
 {
   "action": "run_command",
   "command": "pytest tests/"
 }
+```
+
+**Example Output:**
+```bash
+# Default (safe mode - shell=False)
+# > python setup.py install
+# > ls -la  
+# (each requires approval first)
+
+# Unsafe mode (shell=True)
+# > ls -la | grep test && echo done
+# (pipes, redirects, && chains all supported)
 ```
 
 ### Delegation
@@ -525,20 +542,51 @@ Agent configuration via [config.py](../neoflow/config.py):
 ```python
 @dataclass
 class AgentConfig:
-    context_token_threshold: int = 25_000
-    large_message_ratio: float = 0.50
+    context_token_threshold: int = 29_000
+    large_message_ratio: float = 0.90
     planning_enabled: bool = True
+    # Loop detection settings
+    max_iterations: int = 200
+    loop_detection_enabled: bool = True
+    loop_action_window_size: int = 20
+    loop_repetition_threshold: int = 8
+    loop_error_threshold: int = 8
+    loop_pattern_length: int = 10
+    # Dictionary compression settings
+    compression_enabled: bool = True
+    compression_min_tokens: int = 1000
+    compression_min_chars: int = 5000
+    # Command execution settings
+    unsafe_mode: bool = False
 ```
 
 ### Environment Variables
 
 ```bash
-# Enable/disable planning
+# Context management thresholds
+AGENT_CONTEXT_TOKEN_THRESHOLD=29000
+AGENT_LARGE_MESSAGE_RATIO=0.90
+
+# Planning
 AGENT_PLANNING_ENABLED=true
 
-# Context management thresholds
-AGENT_CONTEXT_TOKEN_THRESHOLD=25000
-AGENT_LARGE_MESSAGE_RATIO=0.50
+# Execution limits
+AGENT_MAX_ITERATIONS=200
+
+# Loop detection
+AGENT_LOOP_DETECTION_ENABLED=true
+AGENT_LOOP_ACTION_WINDOW_SIZE=20
+AGENT_LOOP_REPETITION_THRESHOLD=8
+AGENT_LOOP_ERROR_THRESHOLD=8
+AGENT_LOOP_PATTERN_LENGTH=10
+
+# Message compression
+AGENT_COMPRESSION_ENABLED=true
+AGENT_COMPRESSION_MIN_TOKENS=1000
+AGENT_COMPRESSION_MIN_CHARS=5000
+
+# Command execution (CAUTION: only enable for trusted environments)
+AGENT_UNSAFE_MODE=false
 ```
 
 ## Project-Local Configuration
@@ -613,6 +661,36 @@ neoflow agent "Step 1: Create new JWT token handler"
 neoflow agent "Step 2: Update login endpoint to use new handler"
 # etc.
 ```
+
+### 6. Command Execution Safety
+
+By default, all `run_command` actions require explicit user approval:
+
+**Recommended (Safe):**
+```bash
+# Default behavior - each command requires confirmation
+neoflow agent "Run the test suite and fix any failures"
+```
+
+**For Automation (Use with Caution):**
+```bash
+# Only in trusted CI/CD environments, not local development
+export AGENT_UNSAFE_MODE=true
+neoflow agent "Deploy to production"
+```
+
+**When to Use `AGENT_UNSAFE_MODE=true`:**
+- CI/CD pipelines with controlled environments
+- Trusted automation scenarios
+- Development machines where you control the LLM
+
+**When to Keep Safe Mode (default):**
+- Local development (recommended)
+- Untrusted LLM sources
+- Production agents handling user requests
+- When running agents on shared machines
+
+Note: Unsafe mode enables `shell=True` for shell features (pipes, redirects, etc.) but bypasses approval prompts.
 
 ## Troubleshooting
 

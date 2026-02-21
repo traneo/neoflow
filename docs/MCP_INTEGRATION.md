@@ -30,7 +30,7 @@ The Model Context Protocol (MCP) is an open protocol that standardizes how AI ap
 
 ## Features
 
-✅ **6 Powerful Tools**
+✅ **5 Powerful Tools**
 - `ask_chat` - Conversational AI with comprehensive search (⭐ Recommended)
 - `search_code` - Indexed code search with filters
 - `search_documentation` - Documentation search
@@ -291,23 +291,7 @@ How does authentication work in this project? Show me the implementation.
 
 **Response:** Complete ticket with title, URL, full question, and all comments in chronological order.
 
----
 
-**Parameters:**
-- `query` (string, required): Search query
-- `repository` (string, optional): Specific repository (e.g., "group/repo")
-- `limit` (integer, optional): Max results 1-20 (default: 10)
-
-**Example:**
-```json
-{
-  "query": "database migration",
-  "repository": "backend/api",
-  "limit": 5
-}
-```
-
----
 
 ## Client Setup
 

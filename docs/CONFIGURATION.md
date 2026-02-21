@@ -129,22 +129,55 @@ IMPORTER_MAX_WORKERS=20
 ```python
 @dataclass
 class AgentConfig:
-    context_token_threshold: int = 25_000
-    large_message_ratio: float = 0.50
+    context_token_threshold: int = 29_000
+    large_message_ratio: float = 0.90
     planning_enabled: bool = True
+    # Loop detection settings
+    max_iterations: int = 200
+    loop_detection_enabled: bool = True
+    loop_action_window_size: int = 20
+    loop_repetition_threshold: int = 8
+    loop_error_threshold: int = 8
+    loop_pattern_length: int = 10
+    # Dictionary compression settings
+    compression_enabled: bool = True
+    compression_min_tokens: int = 1000
+    compression_min_chars: int = 5000
+    # Command execution settings
+    unsafe_mode: bool = False
 ```
 
 **Environment Variables:**
 ```bash
-AGENT_CONTEXT_TOKEN_THRESHOLD=25000
-AGENT_LARGE_MESSAGE_RATIO=0.50
+AGENT_CONTEXT_TOKEN_THRESHOLD=29000
+AGENT_LARGE_MESSAGE_RATIO=0.90
 AGENT_PLANNING_ENABLED=true
+AGENT_MAX_ITERATIONS=200
+AGENT_LOOP_DETECTION_ENABLED=true
+AGENT_LOOP_ACTION_WINDOW_SIZE=20
+AGENT_LOOP_REPETITION_THRESHOLD=8
+AGENT_LOOP_ERROR_THRESHOLD=8
+AGENT_LOOP_PATTERN_LENGTH=10
+AGENT_COMPRESSION_ENABLED=true
+AGENT_COMPRESSION_MIN_TOKENS=1000
+AGENT_COMPRESSION_MIN_CHARS=5000
+AGENT_UNSAFE_MODE=false
 ```
 
 **Description:**
 - `context_token_threshold`: Max tokens before context optimization
 - `large_message_ratio`: Ratio to determine "large" messages
 - `planning_enabled`: Enable/disable planning phase
+- `max_iterations`: Maximum agent iterations before stopping
+- `loop_detection_enabled`: Enable/disable loop detection
+- `loop_action_window_size`: Number of recent actions to analyze for loops
+- `loop_repetition_threshold`: Repetition count threshold for loop detection
+- `loop_error_threshold`: Error count threshold for loop detection
+- `loop_pattern_length`: Minimum pattern length for loop detection
+- `compression_enabled`: Enable/disable message compression
+- `compression_min_tokens`: Minimum tokens to trigger compression
+- `compression_min_chars`: Minimum characters to trigger compression
+- `unsafe_mode`: When `true`, bypasses run_command approval prompts and uses `shell=True` for command execution
 
 ### Chat Configuration
 
@@ -280,9 +313,19 @@ CHUNK_SIZE_BYTES=2000
 
 ### Agent
 ```bash
-AGENT_CONTEXT_TOKEN_THRESHOLD=25000
-AGENT_LARGE_MESSAGE_RATIO=0.50
+AGENT_CONTEXT_TOKEN_THRESHOLD=29000
+AGENT_LARGE_MESSAGE_RATIO=0.90
 AGENT_PLANNING_ENABLED=true
+AGENT_MAX_ITERATIONS=200
+AGENT_LOOP_DETECTION_ENABLED=true
+AGENT_LOOP_ACTION_WINDOW_SIZE=20
+AGENT_LOOP_REPETITION_THRESHOLD=8
+AGENT_LOOP_ERROR_THRESHOLD=8
+AGENT_LOOP_PATTERN_LENGTH=10
+AGENT_COMPRESSION_ENABLED=true
+AGENT_COMPRESSION_MIN_TOKENS=1000
+AGENT_COMPRESSION_MIN_CHARS=5000
+AGENT_UNSAFE_MODE=false
 ```
 
 ### Chat

@@ -274,8 +274,24 @@ Sessions maintain conversation context across multiple requests.
 ```python
 @dataclass
 class ServerConfig:
-    session_ttl_minutes: int = 60  # Session lifetime
-    max_sessions: int = 100         # Max concurrent sessions
+    host: str = "localhost"
+    port: int = 9720
+    cors_origins: list[str] = field(default_factory=lambda: ["*"])
+    session_ttl_minutes: int = 60
+    max_sessions: int = 100
+    enforce_system_prompt: bool = True
+    api_key: str = ""
+```
+
+**Environment Variables:**
+```bash
+SERVER_HOST=localhost
+SERVER_PORT=9720
+SERVER_CORS_ORIGINS=["*"]
+SERVER_SESSION_TTL_MINUTES=60
+SERVER_MAX_SESSIONS=100
+SERVER_ENFORCE_SYSTEM_PROMPT=true
+SERVER_API_KEY=
 ```
 
 ### Cleanup
