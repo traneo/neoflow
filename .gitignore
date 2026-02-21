@@ -55,3 +55,21 @@ logs/
 # Temporary files
 *.tmp
 .temp/
+
+# Secrets and credentials
+*.pem
+*.key
+*.crt
+secrets/
+credentials/
+.aws/
+.gcloud/
+
+# Secrets and credentials
+*.pem
+*.key
+*.crt
+secrets/
+credentials/
+.aws/
+.gcloud/

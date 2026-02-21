@@ -45,7 +45,7 @@ services:
     container_name: weaviate
     environment:
       TEXT2VEC_OLLAMA_EMBEDDING_MODEL: 'nomic-embed-text'
-      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: 'true'
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: 'false'
       PERSISTENCE_DATA_PATH: '/var/lib/weaviate'
       ENABLE_MODULES: 'text2vec-ollama,generative-ollama'
       CLUSTER_HOSTNAME: 'node1'

@@ -5,7 +5,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from neoflow.config import Config
-from neoflow.api.dependencies import get_config, get_session_manager
+from neoflow.api.dependencies import get_config, get_session_manager, verify_api_key
 from neoflow.api.session_manager import SessionManager
 from neoflow.api.models import (
     SessionCreateRequest,
@@ -29,6 +29,7 @@ router = APIRouter(prefix="/api/v1/sessions", tags=["sessions"])
 async def create_session(
     request: SessionCreateRequest,
     session_manager: SessionManager = Depends(get_session_manager),
+    _auth: None = Depends(verify_api_key),
 ):
     """
     Create a new chat session.
@@ -62,6 +63,7 @@ async def create_session(
 async def get_session(
     session_id: str,
     session_manager: SessionManager = Depends(get_session_manager),
+    _auth: None = Depends(verify_api_key),
 ):
     """
     Get session metadata.
@@ -96,6 +98,7 @@ async def session_query(
     request: SessionQueryRequest,
     config: Config = Depends(get_config),
     session_manager: SessionManager = Depends(get_session_manager),
+    _auth: None = Depends(verify_api_key),
 ):
     """
     Execute a query within a session.
@@ -178,7 +181,7 @@ async def session_query(
         logger.error("Session query failed: %s", e, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Query execution failed: {str(e)}",
+            detail="An error occurred processing your request",
         )
 
 
@@ -187,6 +190,7 @@ async def retry_query(
     session_id: str,
     config: Config = Depends(get_config),
     session_manager: SessionManager = Depends(get_session_manager),
+    _auth: None = Depends(verify_api_key),
 ):
     """
     Retry the last query in a session.
@@ -263,7 +267,7 @@ async def retry_query(
         logger.error("Retry query failed: %s", e, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Query execution failed: {str(e)}",
+            detail="An error occurred processing your request",
         )
 
 
@@ -272,6 +276,7 @@ async def delete_session(
     session_id: str,
     save: bool = True,
     session_manager: SessionManager = Depends(get_session_manager),
+    _auth: None = Depends(verify_api_key),
 ):
     """
     Delete a session.
@@ -304,6 +309,7 @@ async def delete_session(
 async def get_history(
     session_id: str,
     session_manager: SessionManager = Depends(get_session_manager),
+    _auth: None = Depends(verify_api_key),
 ):
     """
     Get full conversation history for a session.

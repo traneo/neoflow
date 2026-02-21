@@ -207,12 +207,25 @@ async def run_mcp_server(transport: str = "stdio", config: Config | None = None)
 
                 await sse.handle_post_message(scope, receive, send)
         
-        app = Starlette(
+        starlette_app = Starlette(
             routes=[
                 Route("/sse", endpoint=SseEndpoint()),
                 Route("/messages", endpoint=MessagesEndpoint(), methods=["POST"]),
             ]
         )
+
+        async def auth_middleware(scope, receive, send):
+            if scope["type"] == "http" and config.mcp.auth_required:
+                headers = dict(scope.get("headers", []))
+                auth_header = headers.get(b"authorization", b"").decode()
+                token = auth_header.removeprefix("Bearer ").strip()
+                if token != config.mcp.auth_token:
+                    response = PlainTextResponse("Unauthorized", status_code=401)
+                    await response(scope, receive, send)
+                    return
+            await starlette_app(scope, receive, send)
+
+        app = auth_middleware
         
         import uvicorn
         config_uv = uvicorn.Config(

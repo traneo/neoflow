@@ -70,22 +70,24 @@ class OllamaProvider(LLMProvider):
 
             # Try primary endpoint
             try:
-                response = requests.get(f"{self.endpoint}/api/tags", timeout=2)
+                with requests.Session() as session:
+                    response = session.get(f"{self.endpoint}/api/tags", timeout=2)
                 if response.status_code == 200:
                     return True
             except Exception:
                 pass
-            
+
             # Try fallback endpoint (localhost)
             try:
-                response = requests.get(f"{self._fallback_endpoint}/api/tags", timeout=2)
+                with requests.Session() as session:
+                    response = session.get(f"{self._fallback_endpoint}/api/tags", timeout=2)
                 if response.status_code == 200:
                     # Update endpoint to use localhost since Docker hostname didn't work
                     self.endpoint = self._fallback_endpoint
                     return True
             except Exception:
                 pass
-            
+
             return False
         except Exception as e:
             logger.debug(f"Ollama not available: {e}")
@@ -167,7 +169,8 @@ class VLLMProvider(LLMProvider):
         try:
             import requests
 
-            response = requests.get(f"{self.api_url}/health", timeout=2)
+            with requests.Session() as session:
+                response = session.get(f"{self.api_url}/health", timeout=2)
             return response.status_code == 200
         except Exception as e:
             logger.debug(f"vLLM not available: {e}")

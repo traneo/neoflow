@@ -1,5 +1,6 @@
 """Interactive input and cancellation support for the agent loop and chat."""
 
+import contextvars
 import re
 import sys
 import threading
@@ -14,6 +15,21 @@ from prompt_toolkit.key_binding import KeyBindings
 
 from neoflow.agent.domains import list_domains
 from neoflow.status_bar import estimate_tokens
+
+# Global context variable to track the current active StatusBar instance
+_active_status_bar: contextvars.ContextVar = contextvars.ContextVar(
+    "_active_status_bar", default=None
+)
+
+
+def set_active_status_bar(bar) -> None:
+    """Register the active StatusBar instance for pause/resume during prompts.
+    
+    Args:
+        bar: The StatusBar instance, or None to unregister.
+    """
+    _active_status_bar.set(bar)
+
 
 _MENTION_PATTERN = re.compile(r"@\w*")
 
@@ -91,11 +107,22 @@ def multiline_prompt(prompt_text: str, is_agent: bool = False) -> str:
         EOFError: If the user presses Ctrl+D.
     """
     session = _agent_session if is_agent else _chat_session
-    return session.prompt(
-        HTML(prompt_text),
-        multiline=True,
-        key_bindings=_bindings,
-    )
+    
+    # Pause any active status bar to allow prompt_toolkit to work without ANSI conflicts
+    bar = _active_status_bar.get()
+    if bar is not None:
+        bar.pause()
+    
+    try:
+        return session.prompt(
+            HTML(prompt_text),
+            multiline=True,
+            key_bindings=_bindings,
+        )
+    finally:
+        # Resume the status bar after input is complete
+        if bar is not None:
+            bar.resume()
 
 
 def agent_prompt(message: str, choices: list[str] | None = None, default: str = "") -> str:
@@ -120,6 +147,11 @@ def agent_prompt(message: str, choices: list[str] | None = None, default: str = 
         suffix += f" ({default})"
     suffix += ": "
 
+    # Pause any active status bar to allow prompt_toolkit to work without ANSI conflicts
+    bar = _active_status_bar.get()
+    if bar is not None:
+        bar.pause()
+
     try:
         while True:
             answer = _agent_session.prompt(HTML(f"<b>{message}</b>{suffix}")).strip()
@@ -129,6 +161,10 @@ def agent_prompt(message: str, choices: list[str] | None = None, default: str = 
                 return answer
     except (KeyboardInterrupt, EOFError):
         raise AgentCancelled()
+    finally:
+        # Resume the status bar after input is complete
+        if bar is not None:
+            bar.resume()
 
 
 def run_llm_with_cancel(llm_fn, status_bar=None):

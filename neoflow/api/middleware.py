@@ -41,6 +41,6 @@ def create_error_handler(app):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={
                 "error": "Internal Server Error",
-                "detail": str(exc),
+                "detail": "An internal error occurred",
             },
         )

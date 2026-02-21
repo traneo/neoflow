@@ -50,8 +50,23 @@ def _check_services(config: Config):
         sys.exit(1)
 
     try:
-        from ollama import list as ollama_list
-        ollama_list()
+        import requests
+        urls = [
+            config.llm_provider.ollama_api_url.rstrip("/"),
+            "http://localhost:11434",
+        ]
+        connected = False
+        for url in dict.fromkeys(urls):  # deduplicate while preserving order
+            try:
+                with requests.Session() as session:
+                    resp = session.get(f"{url}/api/tags", timeout=2)
+                if resp.status_code == 200:
+                    connected = True
+                    break
+            except Exception:
+                pass
+        if not connected:
+            raise RuntimeError("unreachable")
     except Exception:
         console.print("[red bold]Cannot connect to Ollama.[/red bold]")
         console.print("Make sure it's running: [cyan]docker compose up -d[/cyan]")
@@ -108,6 +123,9 @@ def cmd_search(args, config: Config):
 
 def _save_report(content: str, name: str):
     """Save an answer to the reports directory."""
+    if not name or any(c in name for c in ('/', '\\', '..')) or os.path.isabs(name):
+        console.print("[red]Invalid filename[/red]")
+        return
     os.makedirs("reports", exist_ok=True)
     path = os.path.join("reports", f"{name}.md")
     with open(path, "w") as f:
@@ -258,6 +276,34 @@ def _save_chat_history(history: list[dict], config: Config):
     with open(path, "w") as f:
         json.dump(history, f, indent=2)
     console.print(f"[dim]Chat history saved to {path}[/dim]")
+
+
+def cmd_agent(args, config: Config):
+    """Run the agent on a task directly from the command line."""
+    from neoflow.agent.agent import run_agent
+
+    _check_services(config)
+
+    # Build task string — prefix @domain mentions for each --domain flag
+    task_parts = []
+    for domain in getattr(args, "domain", None) or []:
+        task_parts.append(f"@{domain}")
+    task_parts.append(args.task)
+    task = " ".join(task_parts)
+
+    # --no-planning disables the planning phase
+    if getattr(args, "no_planning", False):
+        config.agent.planning_enabled = False
+
+    # --working-dir changes the working directory for file and command actions
+    working_dir = getattr(args, "working_dir", None)
+    if working_dir:
+        if not os.path.isdir(working_dir):
+            console.print(f"[red bold]Working directory not found: {working_dir}[/red bold]")
+            sys.exit(1)
+        os.chdir(working_dir)
+
+    run_agent(task, config, console)
 
 
 def cmd_serve(args, config: Config):
@@ -597,6 +643,22 @@ def main():
 
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
+    # agent
+    agent_parser = subparsers.add_parser("agent", help="Execute an autonomous task with planning and tool usage")
+    agent_parser.add_argument("task", type=str, help="Task description")
+    agent_parser.add_argument(
+        "--no-planning", action="store_true",
+        help="Disable the planning phase and execute the task directly",
+    )
+    agent_parser.add_argument(
+        "--domain", type=str, action="append", metavar="NAME",
+        help="Load domain-specific knowledge (can be repeated)",
+    )
+    agent_parser.add_argument(
+        "--working-dir", type=str, default=None, metavar="PATH",
+        help="Set working directory for file and command actions",
+    )
+
     # search
     search_parser = subparsers.add_parser("search", help="Search tickets (single query)")
     search_parser.add_argument("-q", "--query", type=str, help="Search query")
@@ -718,6 +780,7 @@ def main():
         config.llm_provider.provider = args.provider
     
     commands = {
+        "agent": cmd_agent,
         "search": cmd_search,
         "import": cmd_import,
         "config": cmd_config,

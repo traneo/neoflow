@@ -1,6 +1,7 @@
 import logging
 import os
 import re
+import shlex
 import subprocess
 
 from anyio import sleep
@@ -44,6 +45,12 @@ _AGENT_TOOLS = {
     "notebook_remove",
     "done",
 }
+
+
+# Session-level approval toggle for run_command confirmations.
+# When True, run_command actions execute without confirmation for the
+# remainder of the current process/session.
+_RUN_COMMANDS_AUTO_APPROVED_SESSION = False
 
 
 def run_agent(task: str, config: Config, console: Console, bar: StatusBar | None = None):
@@ -98,6 +105,10 @@ def run_agent(task: str, config: Config, console: Console, bar: StatusBar | None
     planner = Planner(config, bar, console)
     task_queue = planner.maybe_plan(cleaned_task, system_prompt)
 
+    # Per-query approval state: once one run_command is approved in this query,
+    # subsequent run_command actions in the same query won't ask again.
+    query_confirmation_state = {"run_command_approved": False}
+
     try:
         if task_queue is not None:
             # Task-by-task execution: process one task at a time
@@ -137,7 +148,15 @@ def run_agent(task: str, config: Config, console: Console, bar: StatusBar | None
                 ) if config.agent.loop_detection_enabled else None
                 try:
                     while True:
-                        _agent_step(messages, config, console, bar, task_optimizer, task_loop_detector)
+                        _agent_step(
+                            messages,
+                            config,
+                            console,
+                            bar,
+                            task_optimizer,
+                            task_loop_detector,
+                            query_confirmation_state,
+                        )
                 except _AgentDone as done:
                     # Extract the task result from the final "done" action
                     if done.result:
@@ -183,7 +202,15 @@ def run_agent(task: str, config: Config, console: Console, bar: StatusBar | None
             bar.add_tokens(estimate_tokens(user_msg))
 
             while True:
-                _agent_step(messages, config, console, bar, optimizer, loop_detector)
+                _agent_step(
+                    messages,
+                    config,
+                    console,
+                    bar,
+                    optimizer,
+                    loop_detector,
+                    query_confirmation_state,
+                )
     except AgentCancelled:
         console.print("\n[bold]Agent cancelled.[/bold]")
     except _AgentDone:
@@ -193,7 +220,15 @@ def run_agent(task: str, config: Config, console: Console, bar: StatusBar | None
             bar.stop()
 
 
-def _agent_step(messages: list[dict], config: Config, console: Console, status_bar: StatusBar, optimizer: ContextOptimizer, loop_detector: LoopDetector | None) -> str | None:
+def _agent_step(
+    messages: list[dict],
+    config: Config,
+    console: Console,
+    status_bar: StatusBar,
+    optimizer: ContextOptimizer,
+    loop_detector: LoopDetector | None,
+    query_confirmation_state: dict[str, bool],
+) -> str | None:
     """Execute one iteration of the agent loop.
 
     Returns:
@@ -320,23 +355,42 @@ def _agent_step(messages: list[dict], config: Config, console: Console, status_b
         param_val = str(action[primary_key])[:60]
         action_summary = f"{act_name}: {param_val}"
 
-    # Ask for user confirmation (raises AgentCancelled on Ctrl+C)
-    user_choice = "y" # agent_prompt("Confirm action?", choices=["y", "n", "/exit"], default="y")
+    # Ask for confirmation only for run_command.
+    if act_name == "run_command":
+        global _RUN_COMMANDS_AUTO_APPROVED_SESSION
+        needs_confirmation = (
+            not _RUN_COMMANDS_AUTO_APPROVED_SESSION
+            and not query_confirmation_state.get("run_command_approved", False)
+        )
 
-    if user_choice == "/exit":
-        console.print("[bold]Exiting agent mode.[/bold]")
-        raise _AgentDone()
+        if needs_confirmation:
+            user_choice = agent_prompt(
+                "Allow this command?",
+                choices=["y", "n", "a", "/exit"],
+                default="y",
+            )
 
-    if user_choice == "n":
-        feedback = agent_prompt("Optional feedback (or Enter to skip)")
-        msg = "The user declined this action."
-        if feedback:
-            msg += f" Feedback: {feedback}"
-        msg += " Please propose a different approach or action."
-        optimizer.add_message(messages, {"role": "user", "content": msg})
-        optimizer.optimize(messages)
-        status_bar.increment_messages()
-        return
+            if user_choice == "/exit":
+                console.print("[bold]Exiting agent mode.[/bold]")
+                raise _AgentDone()
+
+            if user_choice == "n":
+                feedback = agent_prompt("Optional feedback (or Enter to skip)")
+                msg = "The user declined this run_command action."
+                if feedback:
+                    msg += f" Feedback: {feedback}"
+                msg += " Please propose a different approach or action."
+                optimizer.add_message(messages, {"role": "user", "content": msg})
+                optimizer.optimize(messages)
+                status_bar.increment_messages()
+                return
+
+            if user_choice == "a":
+                _RUN_COMMANDS_AUTO_APPROVED_SESSION = True
+                query_confirmation_state["run_command_approved"] = True
+                console.print("[green]Auto-approval enabled for run_command in this session.[/green]")
+            else:
+                query_confirmation_state["run_command_approved"] = True
 
     # Execute the action
     status_bar.set_loading(True, f"Executing {act_name}...")
@@ -590,9 +644,10 @@ def _execute_action(action: dict, config: Config, console: Console | None = None
 
 
 def _run_command(command: str) -> str:
+    args = shlex.split(command)
     result = subprocess.run(
-        command,
-        shell=True,
+        args,
+        shell=False,
         capture_output=True,
         text=True,
         timeout=30,

@@ -362,8 +362,17 @@ def index_zip_file(zip_path: str, repo_name: str, config: Config):
     if not zipfile.is_zipfile(zip_path):
         raise ValueError(f"Not a valid zip file: {zip_path}")
 
+    MAX_UNCOMPRESSED = 500 * 1024 * 1024  # 500 MB total
+
     with tempfile.TemporaryDirectory() as tmp_dir:
         with zipfile.ZipFile(zip_path, "r") as archive:
+            total_size = 0
+            for member in archive.infolist():
+                if member.filename.startswith('/') or '..' in member.filename:
+                    raise ValueError(f"Unsafe path in zip: {member.filename}")
+                total_size += member.file_size
+                if total_size > MAX_UNCOMPRESSED:
+                    raise ValueError("Zip file exceeds maximum uncompressed size (500 MB)")
             archive.extractall(tmp_dir)
 
         entries = os.listdir(tmp_dir)

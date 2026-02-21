@@ -73,6 +73,11 @@ class StatusBar:
         """Activate the status bar and begin rendering."""
         if not self._enabled:
             return  # Do nothing if disabled
+        
+        # Register this instance as the active status bar for prompt pause/resume
+        from neoflow.agent.input import set_active_status_bar
+        set_active_status_bar(self)
+        
         with self._lock:
             self._state.active = True
             self._state.start_time = time.time()
@@ -86,6 +91,11 @@ class StatusBar:
         """Tear down the status bar and restore the terminal."""
         if not self._enabled:
             return  # Do nothing if disabled
+        
+        # Unregister this instance as the active status bar
+        from neoflow.agent.input import set_active_status_bar
+        set_active_status_bar(None)
+        
         self._stop_event.set()
         if self._thread is not None:
             self._thread.join(timeout=1)
@@ -198,31 +208,30 @@ class StatusBar:
         return cols, rows
 
     def _setup_scroll_region(self) -> None:
-        """Set the scroll region to exclude the reserved bottom lines."""
-        cols, rows = self._get_terminal_size()
-        reserved = self._reserved_lines()
-        scroll_bottom = rows - reserved
-        if scroll_bottom < 1:
-            scroll_bottom = 1
-        self._output_file.write(f"\033[1;{scroll_bottom}r")
-        self._output_file.write(f"\033[{scroll_bottom};1H")
-        self._output_file.flush()
+        """Set the scroll region to exclude the reserved bottom lines.
+        
+        NOTE: Disabled by default because ANSI scroll regions interact poorly
+        with Rich console's output buffering, causing cursor position issues.
+        The status bar uses absolute cursor positioning instead, which is more reliable.
+        """
+        # Temporarily disabled: scroll region interferes with Rich output
+        # cols, rows = self._get_terminal_size()
+        # reserved = self._reserved_lines()
+        # scroll_bottom = rows - reserved
+        # if scroll_bottom < 1:
+        #     scroll_bottom = 1
+        # self._output_file.write(f"\033[1;{scroll_bottom}r")
+        # self._output_file.flush()
+        pass
 
     def _restore_scroll_region(self) -> None:
-        """Restore the full terminal scroll region and clear reserved lines."""
-        cols, rows = self._get_terminal_size()
-        reserved = self._reserved_lines()
-        # Restore full scroll region
-        self._output_file.write(f"\033[1;{rows}r")
-        # Clear all reserved lines
-        for i in range(reserved):
-            self._output_file.write(f"\033[{rows - i};1H\033[2K")
-        # Move cursor back up
-        scroll_bottom = rows - reserved
-        if scroll_bottom < 1:
-            scroll_bottom = 1
-        self._output_file.write(f"\033[{scroll_bottom};1H")
-        self._output_file.flush()
+        """Restore the full terminal scroll region and clear reserved lines.
+        
+        NOTE: This is now a no-op since _setup_scroll_region is disabled.
+        See _setup_scroll_region for explanation.
+        """
+        # Scroll region setup is disabled, so there's nothing to restore
+        pass
 
     # -- SIGWINCH handling ---------------------------------------------------
 

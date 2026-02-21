@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from rich.console import Console
 
 from neoflow.config import Config
-from neoflow.api.dependencies import get_config
+from neoflow.api.dependencies import get_config, verify_api_key
 from neoflow.api.models import QueryRequest, QueryResponse
 from neoflow.chat import run_chat
 from neoflow.status_bar import StatusBar
@@ -20,6 +20,7 @@ router = APIRouter(prefix="/api/v1", tags=["query"])
 async def execute_query(
     request: QueryRequest,
     config: Config = Depends(get_config),
+    _auth: None = Depends(verify_api_key),
 ):
     """
     Execute a single stateless query.
@@ -87,5 +88,5 @@ async def execute_query(
         logger.error("Query execution failed: %s", e, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Query execution failed: {str(e)}",
+            detail="An error occurred processing your request",
         )

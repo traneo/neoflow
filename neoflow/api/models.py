@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 class QueryRequest(BaseModel):
     """Request model for simple query endpoint."""
-    query: str = Field(..., description="The search query", min_length=1)
+    query: str = Field(..., description="The search query", min_length=1, max_length=10000)
     project_keyword: str = Field(default="", description="Project name or keyword to filter by")
     include_code: bool = Field(default=False, description="Include code search results")
     include_system_prompt: bool = Field(
@@ -24,7 +24,7 @@ class SessionCreateRequest(BaseModel):
 
 class SessionQueryRequest(BaseModel):
     """Request model for querying within a session."""
-    query: str = Field(..., description="The search query", min_length=1)
+    query: str = Field(..., description="The search query", min_length=1, max_length=10000)
     project_keyword: str = Field(default="", description="Project name or keyword to filter by")
 
 
