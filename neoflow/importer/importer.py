@@ -4,7 +4,8 @@ import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import weaviate
-from weaviate.classes.config import Configure, ReferenceProperty, DataType, Property
+from weaviate.classes.config import ReferenceProperty, DataType, Property
+from weaviate.classes.query import Filter
 
 from neoflow.config import Config
 from neoflow.models import Ticket
@@ -14,48 +15,69 @@ logger = logging.getLogger(__name__)
 
 def _create_collections(client, config: Config):
     """Create the Tickets and Comments collections in Weaviate."""
-    for name in ("Tickets", "Comments"):
-        if client.collections.exists(name):
-            client.collections.delete(name)
-            logger.info("Deleted existing collection: %s", name)
+    if client.collections.exists("Tickets") and client.collections.exists("Comments"):
+        return
 
-    client.collections.create(
-        name="Tickets",
-        description="Ticket URLs, questions, and ticket numbers",
-        vector_config=config.get_weaviate_vector_config(),
-        properties=[
-            # --- Vectorized (used for semantic search) ---
-            Property(name="title", data_type=DataType.TEXT),
-            Property(name="question", data_type=DataType.TEXT),
-            # --- Not vectorized (metadata for filtering / display) ---
-            Property(name="reference", data_type=DataType.TEXT, skip_vectorization=True),
-            Property(name="url", data_type=DataType.TEXT, skip_vectorization=True),
-            Property(name="chunk_index", data_type=DataType.INT, skip_vectorization=True),
-            Property(name="total_chunks", data_type=DataType.INT, skip_vectorization=True),
-        ],       
-    )
-
-    client.collections.create(
-        name="Comments",
-        description="Comments related to tickets, linked by reference",
-        vector_config=config.get_weaviate_vector_config(),
-        properties=[
-                # --- Vectorized (used for semantic search) ---
-                Property(name="message", data_type=DataType.TEXT),
-                # --- Not vectorized (metadata for filtering / display) ---
+    if not client.collections.exists("Tickets"):
+        client.collections.create(
+            name="Tickets",
+            description="Ticket URLs, questions, and ticket numbers",
+            vector_config=config.get_weaviate_vector_config(),
+            properties=[
+                Property(name="title", data_type=DataType.TEXT),
+                Property(name="question", data_type=DataType.TEXT),
                 Property(name="reference", data_type=DataType.TEXT, skip_vectorization=True),
+                Property(name="url", data_type=DataType.TEXT, skip_vectorization=True),
                 Property(name="chunk_index", data_type=DataType.INT, skip_vectorization=True),
-                Property(name="total_chunks", data_type=DataType.INT, skip_vectorization=True),                
-        ],     
-        references=[
-            ReferenceProperty(name="hasTicket", target_collection="Tickets")
-        ],
-    )
+                Property(name="total_chunks", data_type=DataType.INT, skip_vectorization=True),
+                Property(name="pack_name", data_type=DataType.TEXT, skip_vectorization=True),
+            ],
+        )
+
+    if not client.collections.exists("Comments"):
+        client.collections.create(
+            name="Comments",
+            description="Comments related to tickets, linked by reference",
+            vector_config=config.get_weaviate_vector_config(),
+            properties=[
+                    Property(name="message", data_type=DataType.TEXT),
+                    Property(name="reference", data_type=DataType.TEXT, skip_vectorization=True),
+                    Property(name="chunk_index", data_type=DataType.INT, skip_vectorization=True),
+                    Property(name="total_chunks", data_type=DataType.INT, skip_vectorization=True),
+                    Property(name="pack_name", data_type=DataType.TEXT, skip_vectorization=True),
+            ],
+            references=[
+                ReferenceProperty(name="hasTicket", target_collection="Tickets")
+            ],
+        )
 
     logger.info("Created Tickets and Comments collections")
 
 
-def _process_file(file_path: str, tickets_col, comments_col, batch_size: int):
+def _ensure_pack_name_property(collection):
+    try:
+        collection.config.add_property(
+            Property(name="pack_name", data_type=DataType.TEXT, skip_vectorization=True)
+        )
+    except Exception:
+        pass
+
+
+def _delete_existing_pack_tickets(tickets_col, comments_col, pack_name: str):
+    for collection in (comments_col, tickets_col):
+        while True:
+            result = collection.query.fetch_objects(
+                filters=Filter.by_property("pack_name").equal(pack_name),
+                limit=200,
+                return_properties=["pack_name"],
+            )
+            if not result.objects:
+                break
+            for obj in result.objects:
+                collection.data.delete_by_id(obj.uuid)
+
+
+def _process_file(file_path: str, tickets_col, comments_col, batch_size: int, pack_name: str):
     """Parse a ticket JSON file and insert into Weaviate collections."""
     with open(file_path, "r", encoding="utf-8") as f:
         content = f.read()
@@ -95,6 +117,7 @@ def _process_file(file_path: str, tickets_col, comments_col, batch_size: int):
                 "url": ticket.metadata.url,
                 "chunk_index": question_chunks.index(tk),
                 "total_chunks": len(question_chunks),
+                "pack_name": pack_name,
             }
         )
 
@@ -131,12 +154,21 @@ def _process_file(file_path: str, tickets_col, comments_col, batch_size: int):
                         "message": cm,
                         "chunk_index": comment_chunks.index(cm),
                         "total_chunks": len(comment_chunks),
+                        "pack_name": pack_name,
                     }
             )
 
-def import_tickets(config: Config):
+def import_tickets(
+    config: Config,
+    tickets_dir: str | None = None,
+    pack_name: str = "manual-import",
+    replace_existing: bool = True,
+):
     """Import all ticket JSON files into Weaviate."""
-    tickets_dir = config.importer.tickets_dir
+    tickets_dir = tickets_dir or config.importer.tickets_dir
+    if not os.path.isdir(tickets_dir):
+        raise FileNotFoundError(f"Tickets directory not found: {tickets_dir}")
+
     files = sorted(f for f in os.listdir(tickets_dir) if f.endswith(".json"))
     total = len(files)
     logger.info(f"Found {total} ticket files to import")
@@ -146,6 +178,11 @@ def import_tickets(config: Config):
 
         tickets_col = client.collections.use("Tickets")
         comments_col = client.collections.use("Comments")
+        _ensure_pack_name_property(tickets_col)
+        _ensure_pack_name_property(comments_col)
+
+        if replace_existing:
+            _delete_existing_pack_tickets(tickets_col, comments_col, pack_name)
 
         completed = 0
         failed = 0
@@ -164,6 +201,7 @@ def import_tickets(config: Config):
                     tickets_col,
                     comments_col,
                     config.importer.batch_size,
+                    pack_name,
                 )
                 futures[future] = file_name
 

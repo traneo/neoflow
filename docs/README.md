@@ -19,6 +19,7 @@ Welcome to the NeoFlow documentation! This directory contains comprehensive guid
 ### Search & Data
 - **[Search Features](SEARCH_FEATURES.md)** - Semantic and hybrid search capabilities
 - **[Data Import](DATA_IMPORT.md)** - Ticket and document import system
+- **[Knowledge Pack](KNOWLEDGE_PACK.md)** - Build, install, and manage portable knowledge bundles
 - **[Database Management](DB_COMMANDS.md)** - Database collection management
 
 ### Backend & Configuration
@@ -40,6 +41,7 @@ Welcome to the NeoFlow documentation! This directory contains comprehensive guid
 | Configure LLM provider | [LLM Providers](LLM_PROVIDERS.md) |
 | Create templates | [Template System](TEMPLATE_SYSTEM.md) |
 | Import ticket data | [Data Import](DATA_IMPORT.md) |
+| Build/install knowledge packs | [Knowledge Pack](KNOWLEDGE_PACK.md) |
 | Clear database collections | [Database Management](DB_COMMANDS.md) |
 
 ### Reference
@@ -65,6 +67,7 @@ docs/
 ├── MCP_INTEGRATION.md           # Model Context Protocol integration
 ├── SEARCH_FEATURES.md           # Search capabilities
 ├── DATA_IMPORT.md               # Data import guide
+├── KNOWLEDGE_PACK.md            # Knowledge pack lifecycle guide
 ├── DB_COMMANDS.md               # Database management commands
 ├── LLM_PROVIDERS.md             # LLM provider documentation
 ├── CONFIGURATION.md             # Configuration reference

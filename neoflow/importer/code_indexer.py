@@ -231,8 +231,7 @@ def _connect_weaviate(config: Config):
 def _create_code_snippets_collection(client, config: Config):
     name = "CodeSnippets"
     if client.collections.exists(name):
-        client.collections.delete(name)
-        logger.info("Deleted existing collection: %s", name)
+        return
 
     client.collections.create(
         name=name,
@@ -254,6 +253,7 @@ def _create_code_snippets_collection(client, config: Config):
             Property(name="total_chunks", data_type=DataType.INT, skip_vectorization=True),
             Property(name="line_start", data_type=DataType.INT, skip_vectorization=True),
             Property(name="line_end", data_type=DataType.INT, skip_vectorization=True),
+            Property(name="pack_name", data_type=DataType.TEXT, skip_vectorization=True),
         ],
     )
     logger.info("Created CodeSnippets collection")
@@ -262,6 +262,15 @@ def _create_code_snippets_collection(client, config: Config):
 def _ensure_code_snippets_collection(client, config: Config):
     if not client.collections.exists("CodeSnippets"):
         _create_code_snippets_collection(client, config)
+
+
+def _ensure_pack_name_property(collection):
+    try:
+        collection.config.add_property(
+            Property(name="pack_name", data_type=DataType.TEXT, skip_vectorization=True)
+        )
+    except Exception:
+        pass
 
 
 def _collect_code_files(root: str) -> list[str]:
@@ -276,7 +285,13 @@ def _collect_code_files(root: str) -> list[str]:
     return files
 
 
-def _index_code_from_root(root: str, repo_name: str, source_label: str, config: Config):
+def _index_code_from_root(
+    root: str,
+    repo_name: str,
+    source_label: str,
+    config: Config,
+    pack_name: str = "manual-import",
+):
     max_size = config.importer.max_file_size_bytes
     files = _collect_code_files(root)
 
@@ -285,6 +300,7 @@ def _index_code_from_root(root: str, repo_name: str, source_label: str, config: 
     with _connect_weaviate(config) as weaviate_client:
         _ensure_code_snippets_collection(weaviate_client, config)
         collection = weaviate_client.collections.use("CodeSnippets")
+        _ensure_pack_name_property(collection)
 
         indexed = 0
         skipped = 0
@@ -336,6 +352,7 @@ def _index_code_from_root(root: str, repo_name: str, source_label: str, config: 
                             "line_end": line_end,
                             "imports": "\n".join(imports) if imports else "",
                             "definitions": ", ".join(chunk_definitions) if chunk_definitions else "",
+                            "pack_name": pack_name,
                         }
                     )
                     indexed += 1
@@ -358,7 +375,12 @@ def _index_code_from_root(root: str, repo_name: str, source_label: str, config: 
     )
 
 
-def index_zip_file(zip_path: str, repo_name: str, config: Config):
+def index_zip_file(
+    zip_path: str,
+    repo_name: str,
+    config: Config,
+    pack_name: str = "manual-import",
+):
     if not zipfile.is_zipfile(zip_path):
         raise ValueError(f"Not a valid zip file: {zip_path}")
 
@@ -381,9 +403,14 @@ def index_zip_file(zip_path: str, repo_name: str, config: Config):
         else:
             root = tmp_dir
 
-        _index_code_from_root(root, repo_name, zip_path, config)
+        _index_code_from_root(root, repo_name, zip_path, config, pack_name=pack_name)
 
 
-def index_source_folder(source_path: str, repo_name: str, config: Config):
+def index_source_folder(
+    source_path: str,
+    repo_name: str,
+    config: Config,
+    pack_name: str = "manual-import",
+):
     root = os.path.abspath(source_path)
-    _index_code_from_root(root, repo_name, root, config)
+    _index_code_from_root(root, repo_name, root, config, pack_name=pack_name)

@@ -6,6 +6,25 @@ NeoFlow now includes database management commands to help you maintain your Weav
 
 ## Commands
 
+### List Collections
+
+Use `db list` to see all current Weaviate collections before clearing:
+
+```bash
+neoflow db list
+```
+
+**Example output:**
+```
+┏━━━┳━━━━━━━━━━━━━━━┓
+┃ # ┃ Collection    ┃
+┡━━━╇━━━━━━━━━━━━━━━┩
+│ 1 │ Tickets       │
+│ 2 │ Comments      │
+│ 3 │ CodeSnippets  │
+└───┴───────────────┘
+```
+
 ### Clear Collections
 
 The `db clear` command allows you to delete Weaviate collections.
@@ -17,6 +36,8 @@ To delete all collections in the Weaviate database:
 ```bash
 neoflow db clear
 ```
+
+Before confirmation, NeoFlow shows the collections currently available to clear.
 
 This will:
 1. Prompt for confirmation (safety feature)
@@ -141,13 +162,14 @@ Operation cancelled.
 
 ## Related Commands
 
+- `neoflow db list` - List existing collections
 - `neoflow import --tickets` - Import ticket data
 - `neoflow import --docs <path>` - Import documentation files
 
 ## Technical Details
 
 The command:
-1. Uses the `_check_services()` function to verify Weaviate connectivity
+1. Connects directly to Weaviate using configured host/port settings
 2. Requires user confirmation via `rich.prompt.Confirm`
 3. Uses the Weaviate Python client v4 API
 4. Properly closes the client connection in a `finally` block

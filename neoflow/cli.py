@@ -4,6 +4,7 @@ import logging
 import os
 import sys
 from datetime import datetime
+from pathlib import Path
 
 from rich.console import Console
 from rich.logging import RichHandler
@@ -17,6 +18,17 @@ from neoflow.config import Config
 from neoflow.init import bootstrap_user_resource_folders
 from neoflow.status_bar import StatusBar, status_context
 from neoflow.template import load_template, run_template_form, TemplateError
+from neoflow.knowledge_pack import (
+    MANIFEST_FILENAME,
+    MANUAL_IMPORT_PACK_NAME,
+    build_knowledge_pack,
+    install_knowledge_pack,
+    load_registry,
+    list_knowledge_packs,
+    resolve_registry_entry,
+    uninstall_knowledge_pack,
+    validate_manifest_from_path,
+)
 
 console = Console()
 
@@ -78,6 +90,36 @@ def _check_services(config: Config):
         console.print("[red bold]Cannot connect to Ollama.[/red bold]")
         console.print("Make sure it's running: [cyan]docker compose up -d[/cyan]")
         sys.exit(1)
+
+
+def _weaviate_client(config: Config):
+    import weaviate
+    from weaviate.config import AdditionalConfig, Timeout
+
+    wv = config.weaviate
+    additional_config = AdditionalConfig(
+        timeout=Timeout(
+            init=wv.timeout_init,
+            query=wv.timeout_query,
+            insert=wv.timeout_insert,
+        )
+    )
+
+    if wv.host in {"localhost", "127.0.0.1"}:
+        return weaviate.connect_to_local(
+            port=wv.port,
+            additional_config=additional_config,
+        )
+
+    return weaviate.connect_to_custom(
+        http_host=wv.host,
+        http_port=wv.port,
+        http_secure=False,
+        grpc_host=wv.host,
+        grpc_port=50051,
+        grpc_secure=False,
+        additional_config=additional_config,
+    )
 
 
 def cmd_search(args, config: Config):
@@ -171,7 +213,7 @@ def cmd_import(args, config: Config):
         from neoflow.importer.importer import import_tickets
 
         _check_services(config)
-        import_tickets(config)
+        import_tickets(config, pack_name=MANUAL_IMPORT_PACK_NAME)
         return
 
 
@@ -189,7 +231,7 @@ def cmd_import_documentation(args, config: Config):
     console.print(f"Importing documentation from [cyan]{doc_path}[/cyan]...")
 
     with console.status("[bold green]Importing documentation files..."):
-        count = import_documentation(doc_path, config)
+        count = import_documentation(doc_path, config, pack_name=MANUAL_IMPORT_PACK_NAME)
 
     console.print(f"[green]Documentation import complete: {count} chunks indexed.[/green]")
 
@@ -209,7 +251,7 @@ def cmd_import_zip(args, config: Config):
     console.print(f"Importing [cyan]{zip_path}[/cyan] as [cyan]{repo_name}[/cyan]...")
 
     with console.status("[bold green]Extracting and indexing code from zip..."):
-        index_zip_file(zip_path, repo_name, config)
+        index_zip_file(zip_path, repo_name, config, pack_name=MANUAL_IMPORT_PACK_NAME)
 
     console.print(f"[green]Zip import complete: {repo_name}[/green]")
 
@@ -229,7 +271,7 @@ def cmd_import_source(args, config: Config):
     console.print(f"Importing source from [cyan]{source_path}[/cyan] as [cyan]{repo_name}[/cyan]...")
 
     with console.status("[bold green]Indexing code from source folder..."):
-        index_source_folder(source_path, repo_name, config)
+        index_source_folder(source_path, repo_name, config, pack_name=MANUAL_IMPORT_PACK_NAME)
 
     console.print(f"[green]Source import complete: {repo_name}[/green]")
 
@@ -257,6 +299,279 @@ def cmd_config(args, config: Config):
     
     console.print(f"[green]✓ Generated configuration template: {output_path}[/green]")
     console.print(f"[dim]Edit the file and uncomment/modify values as needed.[/dim]")
+
+
+def cmd_db_clear(args, config: Config):
+    collection_name = getattr(args, "collection", None)
+
+    try:
+        client = _weaviate_client(config)
+    except Exception:
+        console.print("[red bold]Cannot connect to Weaviate.[/red bold]")
+        console.print("Make sure it's running: [cyan]docker compose up -d[/cyan]")
+        sys.exit(1)
+
+    try:
+        existing = sorted(client.collections.list_all(simple=True).keys())
+
+        if collection_name:
+            if collection_name not in set(existing):
+                console.print(f"[yellow]Collection '{collection_name}' does not exist.[/yellow]")
+                if existing:
+                    console.print("Available collections:")
+                    for name in existing:
+                        console.print(f"- {name}")
+                else:
+                    console.print("[yellow]No collections found.[/yellow]")
+                return
+
+            confirmed = Confirm.ask(
+                f"Are you sure you want to delete the {collection_name} collection?",
+                default=False,
+            )
+            if not confirmed:
+                console.print("[yellow]Operation cancelled.[/yellow]")
+                return
+
+            client.collections.delete(collection_name)
+            console.print(f"[green]✓ Deleted collection: {collection_name}[/green]")
+            return
+
+        if not existing:
+            console.print("[yellow]No collections found.[/yellow]")
+            return
+
+        console.print("Collections available to clear:")
+        for name in existing:
+            console.print(f"- {name}")
+
+        confirmed = Confirm.ask(
+            "Are you sure you want to delete ALL collections?",
+            default=False,
+        )
+        if not confirmed:
+            console.print("[yellow]Operation cancelled.[/yellow]")
+            return
+
+        console.print(f"Deleting {len(existing)} collection(s)...")
+        for name in existing:
+            client.collections.delete(name)
+            console.print(f"[green]✓ Deleted: {name}[/green]")
+
+        console.print("[green]All collections cleared successfully.[/green]")
+    finally:
+        client.close()
+
+
+def cmd_db_list(args, config: Config):
+    try:
+        client = _weaviate_client(config)
+    except Exception:
+        console.print("[red bold]Cannot connect to Weaviate.[/red bold]")
+        console.print("Make sure it's running: [cyan]docker compose up -d[/cyan]")
+        sys.exit(1)
+
+    try:
+        existing = sorted(client.collections.list_all(simple=True).keys())
+    finally:
+        client.close()
+
+    if not existing:
+        console.print("[yellow]No collections found.[/yellow]")
+        return
+
+    table = Table(title="Weaviate Collections", show_header=True, border_style="blue")
+    table.add_column("#", style="dim", justify="right")
+    table.add_column("Collection", style="cyan")
+    for index, name in enumerate(existing, start=1):
+        table.add_row(str(index), name)
+    console.print(table)
+
+
+def cmd_db(args, config: Config):
+    if args.db_command == "clear" or getattr(args, "collection", None) is not None:
+        cmd_db_clear(args, config)
+        return
+
+    if args.db_command == "list":
+        cmd_db_list(args, config)
+        return
+
+    console.print("[red]Please specify a valid db subcommand. Use: neoflow db --help[/red]")
+
+
+def _print_pack_metadata(metadata_block: dict):
+    table = Table(title="Knowledge Pack Metadata", show_header=True, border_style="blue")
+    table.add_column("Field", style="bold cyan")
+    table.add_column("Value")
+    for field in (
+        "name",
+        "version",
+        "description",
+        "author",
+        "license",
+        "creation_date",
+        "knowledge_cap_date",
+        "tag",
+    ):
+        table.add_row(field, str(metadata_block.get(field, "")))
+    console.print(table)
+
+
+def _load_manifest_for_install_preview(package_file: str) -> dict:
+    import tempfile
+    import zipfile
+    from pathlib import Path
+
+    if not os.path.isfile(package_file):
+        raise ValueError(f"File not found: {package_file}")
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        with zipfile.ZipFile(package_file, "r") as archive:
+            archive.extractall(temp_dir)
+
+        temp_root = Path(temp_dir)
+        manifest_candidates = list(temp_root.rglob(MANIFEST_FILENAME))
+        if len(manifest_candidates) != 1:
+            raise ValueError("Invalid package: missing manifest.json")
+
+        package_root = manifest_candidates[0].parent
+        validation = validate_manifest_from_path(package_root)
+        if validation.errors:
+            raise ValueError("Invalid package manifest")
+        return validation.manifest
+
+
+def cmd_knowledge_pack(args, config: Config):
+    if args.build:
+        source_path = args.target
+        console.print("Checking manifest info...")
+        try:
+            validation = validate_manifest_from_path(Path(source_path).expanduser().resolve())
+        except FileNotFoundError:
+            console.print("[red]Invalid manifest[/red]")
+            console.print("[red]- manifest.json not found[/red]")
+            sys.exit(1)
+        except Exception as exc:
+            console.print("[red]Invalid manifest[/red]")
+            console.print(f"[red]- {exc}[/red]")
+            sys.exit(1)
+
+        if validation.errors:
+            console.print("[red]Invalid manifest[/red]")
+            for error in validation.errors:
+                console.print(f"[red]- {error}[/red]")
+            sys.exit(1)
+
+        console.print("[green]Manifest is valid![/green]")
+        console.print("Building...")
+        try:
+            package_path, _ = build_knowledge_pack(source_path, output_dir=args.output)
+        except Exception as exc:
+            console.print("[red]Build fail[/red]")
+            console.print(f"[red]{exc}[/red]")
+            sys.exit(1)
+
+        console.print("[green]Build complete[/green]")
+        console.print(f"Package generated: {package_path.name}")
+        console.print(str(package_path.resolve()))
+        return
+
+    if args.install:
+        _check_services(config)
+        try:
+            manifest = _load_manifest_for_install_preview(args.target)
+        except Exception:
+            console.print("[red]knowledge pack invalid, unable to install it![/red]")
+            sys.exit(1)
+
+        _print_pack_metadata(manifest.get("metadata", {}))
+        if not _confirm_modal("Install this knowledge pack?", default=False, title="Install"):
+            console.print("[yellow]Operation cancelled.[/yellow]")
+            return
+
+        pack_display_name = manifest.get('metadata', {}).get('name', '')
+        with console.status(f"[bold green]Installing knowledge pack {pack_display_name}[/bold green]") as status:
+            try:
+                def _on_install_progress(step: int, total: int, label: str) -> None:
+                    status.update(
+                        f"[bold green]Installing knowledge pack {pack_display_name}[/bold green]\n"
+                        f"[cyan]{step}/{total} {label}[/cyan]"
+                    )
+
+                install_knowledge_pack(args.target, config, progress_callback=_on_install_progress)
+            except ValueError as exc:
+                message = str(exc)
+                if "already installed" in message:
+                    console.print(f"[yellow]{message}[/yellow]")
+                    return
+                if "Invalid manifest" in message:
+                    console.print("[red]knowledge pack invalid, unable to install it![/red]")
+                    return
+                console.print("[red]Not able to install knowledge pack![/red]")
+                console.print(f"[red]{message}[/red]")
+                sys.exit(1)
+            except Exception as exc:
+                console.print("[red]Not able to install knowledge pack![/red]")
+                console.print(f"[red]{exc}[/red]")
+                sys.exit(1)
+
+        console.print("[green]knowledge pack Installed.[/green]")
+        return
+
+    if args.uninstall:
+        _check_services(config)
+
+        metadata_for_prompt = {"name": args.target}
+        registry = load_registry()
+        if args.target != MANUAL_IMPORT_PACK_NAME:
+            entry = resolve_registry_entry(registry, args.target)
+            if not entry:
+                console.print(f"[red]Knowledge pack not found: {args.target}[/red]")
+                sys.exit(1)
+            metadata_for_prompt = {
+                "name": entry.get("name", ""),
+                "version": entry.get("version", ""),
+                "description": entry.get("description", ""),
+                "tag": entry.get("tag", ""),
+            }
+
+        _print_pack_metadata(metadata_for_prompt)
+        if not _confirm_modal("Uninstall this knowledge pack?", default=False, title="Uninstall"):
+            console.print("[yellow]Operation cancelled.[/yellow]")
+            return
+
+        with console.status(f"[bold green]Uninstalling knowledge pack {metadata_for_prompt.get('name', '')}[/bold green]"):
+            try:
+                uninstall_knowledge_pack(args.target, config, keep_domain=args.keep_domain)
+            except Exception as exc:
+                console.print("[red]Not able to uninstall knowledge pack![/red]")
+                console.print(f"[red]{exc}[/red]")
+                sys.exit(1)
+
+        console.print("[green]knowledge pack Removed.[/green]")
+        return
+
+    if args.list:
+        packs = list_knowledge_packs()
+        if not packs:
+            console.print("No knowledge packs installed.")
+            return
+
+        table = Table(title="Installed Knowledge Packs", show_header=True, border_style="blue")
+        table.add_column("name", style="bold cyan")
+        table.add_column("version")
+        table.add_column("description")
+        table.add_column("pack-name")
+        for item in packs:
+            table.add_row(
+                str(item.get("name", "")),
+                str(item.get("version", "")),
+                str(item.get("description", "")),
+                str(item.get("pack-name", "")),
+            )
+        console.print(table)
+        return
 
 
 def _print_chat_help():
@@ -706,6 +1021,30 @@ def main():
         help="Repository name label (required with --zip or --source)",
     )
 
+    knowledge_pack_parser = subparsers.add_parser(
+        "knowledge-pack",
+        help="Build, install, uninstall, and list knowledge packs",
+    )
+    knowledge_pack_group = knowledge_pack_parser.add_mutually_exclusive_group(required=True)
+    knowledge_pack_group.add_argument("--build", action="store_true", help="Build a knowledge pack")
+    knowledge_pack_group.add_argument("--install", action="store_true", help="Install a knowledge pack")
+    knowledge_pack_group.add_argument("--uninstall", action="store_true", help="Uninstall a knowledge pack")
+    knowledge_pack_group.add_argument("--list", action="store_true", help="List installed knowledge packs")
+    knowledge_pack_parser.add_argument(
+        "target",
+        nargs="?",
+        help=(
+            "Build path, install file, or uninstall pack-name "
+            f"(use '{MANUAL_IMPORT_PACK_NAME}' to remove manual imports)"
+        ),
+    )
+    knowledge_pack_parser.add_argument("-o", "--output", type=str, default=None, help="Output folder for build artifact")
+    knowledge_pack_parser.add_argument(
+        "--keep-domain",
+        action="store_true",
+        help="Keep copied domain files when uninstalling",
+    )
+
     # config
     config_parser = subparsers.add_parser("config", help="Generate .env configuration template")
     config_parser.add_argument(
@@ -715,6 +1054,32 @@ def main():
     config_parser.add_argument(
         "-f", "--force", action="store_true",
         help="Overwrite existing file without confirmation",
+    )
+
+    # db
+    db_parser = subparsers.add_parser("db", help="Database management commands")
+    db_parser.add_argument(
+        "--collection",
+        type=str,
+        default=None,
+        help="Alias for 'db clear --collection <name>'",
+    )
+    db_subparsers = db_parser.add_subparsers(dest="db_command", help="Database operations")
+
+    db_clear_parser = db_subparsers.add_parser(
+        "clear",
+        help="Delete Weaviate collections",
+    )
+    db_clear_parser.add_argument(
+        "--collection",
+        type=str,
+        default=None,
+        help="Specific collection name to delete (if omitted, deletes all collections)",
+    )
+
+    db_subparsers.add_parser(
+        "list",
+        help="List available Weaviate collections",
     )
 
     # server
@@ -797,7 +1162,9 @@ def main():
         "agent": cmd_agent,
         "search": cmd_search,
         "import": cmd_import,
+        "knowledge-pack": cmd_knowledge_pack,
         "config": cmd_config,
+        "db": cmd_db,
         "server": cmd_server,
         "serve": cmd_server,
         "mcp-server": cmd_server,
@@ -805,6 +1172,19 @@ def main():
     }
 
     if args.command in commands:
+        if args.command == "knowledge-pack":
+            if args.build and not args.target:
+                parser.error("knowledge-pack --build requires <path/to/content>")
+            if args.install and not args.target:
+                parser.error("knowledge-pack --install requires <file_name>")
+            if args.uninstall and not args.target:
+                parser.error("knowledge-pack --uninstall requires <pack-name>")
+        if (
+            args.command == "db"
+            and not getattr(args, "db_command", None)
+            and getattr(args, "collection", None) is None
+        ):
+            parser.error("db requires a subcommand (e.g., 'clear')")
         commands[args.command](args, config)
     else:
         # No command specified - default to interactive mode

@@ -272,6 +272,41 @@ neoflow import --source ./path/to/repo --name my-repo
 
 ---
 
+### Knowledge Pack Commands
+
+Build, install, uninstall, and list Knowledge Packs.
+
+```bash
+neoflow knowledge-pack --build <path/to/content> [-o <output/folder>]
+neoflow knowledge-pack --install <file.nkp>
+neoflow knowledge-pack --uninstall <pack-name> [--keep-domain]
+neoflow knowledge-pack --list
+```
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `--build` | Build a knowledge pack from a folder containing `manifest.json` |
+| `--install` | Install a `.nkp` package |
+| `--uninstall` | Uninstall by pack name (supports with/without `.nkp`) |
+| `--list` | Show installed knowledge packs |
+| `--keep-domain` | Keep copied domain files during uninstall |
+| `-o, --output <path>` | Output directory for build artifacts |
+
+**Behavior notes:**
+- Build validates manifest metadata, sections, and referenced paths before packaging.
+- Install shows metadata, asks confirmation, and imports docs/domain/tickets/code snippets.
+- Uninstall removes Weaviate data by `pack-name`; domain files are removed unless `--keep-domain` is set.
+- Manual imports can be removed with:
+
+```bash
+neoflow knowledge-pack --uninstall manual-import
+```
+
+For full manifest and lifecycle details, see [Knowledge Pack](KNOWLEDGE_PACK.md).
+
+---
+
 ### Database Commands
 
 Manage Weaviate database collections.

@@ -4,7 +4,7 @@ import logging
 import os
 
 import weaviate
-from weaviate.classes.config import Configure
+from weaviate.classes.config import DataType, Property
 from weaviate.config import AdditionalConfig, Timeout
 
 from neoflow.config import Config
@@ -18,15 +18,28 @@ COLLECTION_NAME = "Documentation"
 def _create_documentation_collection(client, config: Config):
     """Create the Documentation collection in Weaviate."""
     if client.collections.exists(COLLECTION_NAME):
-        client.collections.delete(COLLECTION_NAME)
-        logger.info("Deleted existing collection: %s", COLLECTION_NAME)
+        return
 
     client.collections.create(
         name=COLLECTION_NAME,
         description="Imported documentation files for contextual search",
         vector_config=config.get_weaviate_vector_config(),
+        properties=[
+            Property(name="file_path", data_type=DataType.TEXT, skip_vectorization=True),
+            Property(name="source_dir", data_type=DataType.TEXT, skip_vectorization=True),
+            Property(name="pack_name", data_type=DataType.TEXT, skip_vectorization=True),
+        ],
     )
     logger.info("Created %s collection", COLLECTION_NAME)
+
+
+def _ensure_pack_name_property(collection):
+    try:
+        collection.config.add_property(
+            Property(name="pack_name", data_type=DataType.TEXT, skip_vectorization=True)
+        )
+    except Exception:
+        pass
 
 
 def _connect_weaviate(config: Config):
@@ -43,7 +56,7 @@ def _connect_weaviate(config: Config):
     )
 
 
-def import_documentation(doc_path: str, config: Config):
+def import_documentation(doc_path: str, config: Config, pack_name: str = "manual-import"):
     """Walk a directory, read UTF-8 files, chunk, and insert into the Documentation collection.
 
     Args:
@@ -63,6 +76,7 @@ def import_documentation(doc_path: str, config: Config):
     with _connect_weaviate(config) as client:
         _create_documentation_collection(client, config)
         collection = client.collections.use(COLLECTION_NAME)
+        _ensure_pack_name_property(collection)
 
         indexed = 0
         skipped = 0
@@ -90,6 +104,7 @@ def import_documentation(doc_path: str, config: Config):
                         "file_path": rel_path,
                         "content": chunk,
                         "source_dir": doc_path,
+                        "pack_name": pack_name,
                     }
                 )
                 indexed += 1
