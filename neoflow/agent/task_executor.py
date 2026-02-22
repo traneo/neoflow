@@ -4,7 +4,9 @@ Integrates with the existing Planner to track task resolutions and
 synthesize final answers from multiple task outcomes.
 """
 
+import json as _json
 import logging
+import re as _re
 from pathlib import Path
 from datetime import datetime
 
@@ -39,18 +41,41 @@ class TaskExecutor:
     
     def initialize_task_list(self, prompt: str) -> TaskList | None:
         """Create and initialize a task list for this request.
-        
+
         Args:
             prompt: User's original request
-        
+
         Returns:
             TaskList object or None if initialization failed
         """
         provider = get_provider(self.config.llm_provider.provider)
         model = getattr(self.config.llm_provider, f"{provider.get_name()}_model", None)
-        
+
         self.current_task_list = create_initial_task_list(prompt, provider, model, self.config)
         return self.current_task_list
+
+    def initialize_from_task_queue(self, prompt: str, task_queue) -> TaskList:
+        """Initialize resolution tracking directly from an existing TaskQueue.
+
+        This avoids the redundant LLM call in ``initialize_task_list`` when the
+        Planner has already produced the task list.
+
+        Args:
+            prompt: Original user request (stored for context).
+            task_queue: A ``TaskQueue`` instance returned by the Planner.
+
+        Returns:
+            The newly created ``TaskList``.
+        """
+        task_list = TaskList(
+            id=f"tasklist_{datetime.now().timestamp()}",
+            original_prompt=prompt,
+        )
+        for i, task_desc in enumerate(task_queue.tasks):
+            task_list.add_task(f"task_{i+1}", task_desc)
+        self.current_task_list = task_list
+        logger.info(f"Task list initialized from plan with {len(task_list.tasks)} tasks")
+        return task_list
     
     def record_task_resolution(self, task_id: str, task_description: str, resolution: str, notes: str = "") -> None:
         """Record the resolution for a completed task.
@@ -74,12 +99,14 @@ class TaskExecutor:
         if not self.current_task_list or not self.current_task_list.resolutions:
             return "No previous task resolutions yet."
 
-        lines = ["Previous completed task resolutions:"]
+        parts: list[str] = []
         for res in self.current_task_list.resolutions:
-            lines.append(f"- {res.task_id}: {res.task_description}")
-            lines.append(f"  Result: {res.resolution}")
+            block = [f"**{res.task_id}: {res.task_description}**", f"Result: {res.resolution}"]
+            if res.notes:
+                block.append(f"Context: {res.notes}")
+            parts.append("\n".join(block))
 
-        return "\n".join(lines)
+        return "\n\n".join(parts)
     
     def get_pending_tasks(self) -> list[dict]:
         """Get list of pending (incomplete) tasks.
@@ -150,6 +177,79 @@ Generate the final answer now:"""
             logger.error(f"Synthesis failed: {e}")
             return self.current_task_list.get_summary()
     
+    @staticmethod
+    def extract_discoveries_from_messages(messages: list[dict]) -> str:
+        """Extract key findings from a completed task's message history.
+
+        Scans the message conversation for file paths referenced in the agent's
+        reasoning and shell commands that executed without errors.  The result
+        is a compact, human-readable summary suitable for storing in the
+        resolution ``notes`` field and the cross-task discoveries scratchpad.
+
+        Args:
+            messages: The full message list for the completed task.
+
+        Returns:
+            A multi-line string of key discoveries, or an empty string if none.
+        """
+        _file_pat = _re.compile(
+            r'[`\'"]([a-zA-Z0-9_./\-]+\.'
+            r'(?:py|js|ts|jsx|tsx|json|yaml|yml|md|txt|sh|go|rs|rb|java|cpp|c|h))[`\'"]'
+        )
+        _action_pat = _re.compile(r'```json\s*\n(.*?)\n?\s*```', _re.DOTALL)
+
+        found_files: set[str] = set()
+        working_commands: list[str] = []
+        last_command: str | None = None
+
+        for msg in messages:
+            role = msg.get("role", "")
+            content = msg.get("content", "")
+            source_action = msg.get("_source_action", "")
+
+            if role == "assistant":
+                # Collect file paths from reasoning text
+                for m in _file_pat.finditer(content):
+                    path = m.group(1)
+                    if "/" in path and len(path) > 4:
+                        found_files.add(path)
+                # Track the last proposed run_command
+                for m in _action_pat.finditer(content):
+                    try:
+                        action = _json.loads(m.group(1))
+                        if action.get("action") == "run_command":
+                            last_command = action.get("command", "")
+                    except (_json.JSONDecodeError, ValueError):
+                        pass
+
+            elif role == "user" and source_action == "run_command" and last_command:
+                lower = content.lower()
+                is_error = (
+                    "error:" in lower
+                    or "traceback" in lower
+                    or "command not found" in lower
+                    or "exit code: 1" in lower
+                    or "exit code: 2" in lower
+                    or "no such file" in lower
+                )
+                if not is_error:
+                    working_commands.append(last_command)
+                last_command = None
+
+        parts: list[str] = []
+        if found_files:
+            file_list = sorted(found_files)[:12]
+            parts.append("Key files: " + ", ".join(f"`{f}`" for f in file_list))
+        if working_commands:
+            # Deduplicate while preserving order
+            seen: set[str] = set()
+            unique_cmds = [c for c in working_commands if not (c in seen or seen.add(c))]  # type: ignore[func-returns-value]
+            parts.append(
+                "Working commands:\n" + "\n".join(f"  - `{c}`" for c in unique_cmds[:5])
+            )
+
+        return "\n".join(parts)
+
     def save_task_list(self, filepath: Path | None = None) -> Path:
         """Save the current task list to a JSON file.
         

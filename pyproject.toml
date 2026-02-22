@@ -1,6 +1,6 @@
 [project]
 name = "neoflow"
-version = "0.0.21"
+version = "0.0.29"
 description = "NeoFlow is an AI-powered development assistant designed to streamline the software development process."
 requires-python = ">=3.12"
 dependencies = [

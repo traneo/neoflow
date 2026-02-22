@@ -178,10 +178,11 @@ Signal task completion with a comprehensive summary.
 
 6. **Interactive Commands** — For CLI tools requiring input, use the `expect` utility. Install via package manager if not available: `sudo apt-get install expect` or `brew install expect`.
 
-7. **Knowledge Preservation** — When a command or solution requires multiple attempts:
-   - Record the working version in the agent notebook using `notebook_add`
+7. **Knowledge Preservation** — Proactively record discoveries as you work:
+   - At the start of every task, run `notebook_search` to recall relevant prior findings
+   - When you locate a key file, identify an architectural pattern, or find a working command, use `notebook_add` immediately — do not wait until the end of the task
+   - In multi-task workflows later tasks depend on what you record now; be generous with notes
    - Include context: why it works, any prerequisites, gotchas
-   - Before attempting complex commands, check the notebook first with `notebook_search`
 
 8. **JSON Validity** — Ensure all action JSON is properly formatted:
    - Escape quotes: `\"` 

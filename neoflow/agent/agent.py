@@ -99,16 +99,13 @@ def run_agent(task: str, config: Config, console: Console, bar: StatusBar | None
     # Initialize task executor for resolution tracking
     task_executor = TaskExecutor(config)
     
-    # Check if we should use task resolution tracking
-    should_track_tasks = task_executor.should_use_task_list(cleaned_task)
-    if should_track_tasks:
-        bar.set_message("Initializing task list...")
-        task_executor.initialize_task_list(cleaned_task)
-        _safe_console_print(console, bar, "[cyan]Task list approach detected - tracking resolutions separately[/cyan]")
-
     # Planning phase: analyze the task and optionally generate a plan
     planner = Planner(config, bar, console)
     task_queue = planner.maybe_plan(cleaned_task, system_prompt)
+
+    # Fix 4: always initialize resolution tracking from the plan — no extra LLM call
+    if task_queue is not None:
+        task_executor.initialize_from_task_queue(cleaned_task, task_queue)
 
     # Per-query approval state: once one run_command is approved in this query,
     # subsequent run_command actions in the same query won't ask again.
@@ -118,22 +115,54 @@ def run_agent(task: str, config: Config, console: Console, bar: StatusBar | None
         if task_queue is not None:
             # Task-by-task execution: process one task at a time
             task_results = {}  # Store results for resolution tracking
-            
+            shared_discoveries = ""  # Fix 6: cross-task discoveries scratchpad
+
             for i, task_desc in enumerate(task_queue.tasks):
                 bar.start_task(i)
                 task_id = f"task_{i+1}"
                 _safe_console_print(console, bar, f"\n[bold cyan]--- Task {i + 1}/{len(task_queue.tasks)}: {task_desc} ---[/bold cyan]")
-                
-                # console.print(task_queue.system_prompt, style="dim")
-                # sleep(5)  # Brief pause for readability
 
-                previous_resolutions_context = ""
-                if should_track_tasks and task_executor.current_task_list:
-                    previous_resolutions_context = task_executor.get_previous_resolutions_context()
+                # Fix 1: inject plan overview and task progress so the agent
+                # knows what was done, what it must do now, and what comes next.
+                completed_items = "\n".join(
+                    f"  ✓ Task {j+1}: {t}" for j, t in enumerate(task_queue.tasks[:i])
+                ) if i > 0 else "  (none yet)"
+                remaining_items = "\n".join(
+                    f"  • Task {j+i+2}: {t}" for j, t in enumerate(task_queue.tasks[i+1:])
+                ) if i < len(task_queue.tasks) - 1 else "  (none)"
+
+                plan_section = (
+                    f"## Overall Plan\n{task_queue.plan}\n\n"
+                    f"## Task Progress ({i+1}/{len(task_queue.tasks)})\n"
+                    f"Completed:\n{completed_items}\n\n"
+                    f"**→ Your Current Task (Task {i+1}):** {task_desc}\n\n"
+                    f"Remaining after this:\n{remaining_items}"
+                )
+
+                # Fix 6: share key discoveries accumulated from previous tasks
+                discoveries_section = (
+                    "\n\n## Cross-Task Discoveries\n"
+                    "The following was learned in previous tasks — use this context "
+                    "to avoid repeating work already done:\n"
+                    + shared_discoveries
+                ) if shared_discoveries else ""
+
+                # Fix 2: always include previous resolutions — no conditional gate
+                prev_resolutions = task_executor.get_previous_resolutions_context()
+                resolutions_section = (
+                    f"\n\n## Previous Task Resolutions\n{prev_resolutions}"
+                ) if prev_resolutions != "No previous task resolutions yet." else ""
+
+                user_content = (
+                    f"{plan_section}"
+                    f"{discoveries_section}"
+                    f"{resolutions_section}\n\n"
+                    f"Working directory: {os.getcwd()}"
+                )
 
                 messages = [
                     {"role": "system", "content": task_queue.system_prompt},
-                    {"role": "user", "content": f"Execute this task:\n{task_desc}\n\n{previous_resolutions_context}\n\nWorking directory: {os.getcwd()}"},
+                    {"role": "user", "content": user_content},
                 ]
                 # Reset token/message counts for fresh context
                 with bar._lock:
@@ -163,21 +192,26 @@ def run_agent(task: str, config: Config, console: Console, bar: StatusBar | None
                             query_confirmation_state,
                         )
                 except _AgentDone as done:
-                    # Extract the task result from the final "done" action
                     if done.result:
                         task_results[task_id] = done.result
-                        # Record resolution if tracking is enabled
-                        if should_track_tasks and task_executor.current_task_list:
-                            task_executor.record_task_resolution(
-                                task_id,
-                                task_desc,
-                                done.result,
+                        # Fix 3: extract key findings from full message history
+                        discoveries = TaskExecutor.extract_discoveries_from_messages(messages)
+                        task_executor.record_task_resolution(
+                            task_id,
+                            task_desc,
+                            done.result,
+                            notes=discoveries,
+                        )
+                        # Fix 6: append discoveries to cross-task scratchpad
+                        if discoveries:
+                            shared_discoveries += (
+                                f"\n### Task {i+1}: {task_desc[:60]}\n{discoveries}\n"
                             )
                     bar.complete_task(i)
                     continue
-            
-            # All tasks done - synthesize if tracking enabled
-            if should_track_tasks and task_executor.current_task_list:
+
+            # All tasks done - synthesize resolutions
+            if task_executor.current_task_list:
                 bar.set_message("Synthesizing final answer...")
                 _safe_console_print(console, bar, "\n[cyan]Synthesizing final answer from all task resolutions...[/cyan]")
                 final_answer = task_executor.get_final_synthesis()
