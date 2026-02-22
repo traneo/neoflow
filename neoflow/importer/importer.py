@@ -3,12 +3,12 @@ import logging
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-import weaviate
 from weaviate.classes.config import ReferenceProperty, DataType, Property
 from weaviate.classes.query import Filter
 
 from neoflow.config import Config
 from neoflow.models import Ticket
+from neoflow.weaviate_client import create_weaviate_client
 
 logger = logging.getLogger(__name__)
 
@@ -173,7 +173,7 @@ def import_tickets(
     total = len(files)
     logger.info(f"Found {total} ticket files to import")
 
-    with weaviate.connect_to_local() as client:
+    with create_weaviate_client(config) as client:
         _create_collections(client, config)
 
         tickets_col = client.collections.use("Tickets")

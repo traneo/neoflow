@@ -13,10 +13,8 @@ from importlib import metadata
 from pathlib import Path
 from typing import Callable
 
-import weaviate
-from weaviate.config import AdditionalConfig, Timeout
-
 from neoflow.config import Config
+from neoflow.weaviate_client import create_weaviate_client
 from neoflow.init import get_neoflow_agent_system_prompt_dir, get_neoflow_home_path
 
 MANIFEST_FILENAME = "manifest.json"
@@ -241,30 +239,7 @@ def resolve_registry_entry(registry: dict, pack_query: str) -> dict | None:
 
 
 def _weaviate_client(config: Config):
-    wv = config.weaviate
-    additional_config = AdditionalConfig(
-        timeout=Timeout(
-            init=wv.timeout_init,
-            query=wv.timeout_query,
-            insert=wv.timeout_insert,
-        )
-    )
-
-    if wv.host in {"localhost", "127.0.0.1"}:
-        return weaviate.connect_to_local(
-            port=wv.port,
-            additional_config=additional_config,
-        )
-
-    return weaviate.connect_to_custom(
-        http_host=wv.host,
-        http_port=wv.port,
-        http_secure=False,
-        grpc_host=wv.host,
-        grpc_port=50051,
-        grpc_secure=False,
-        additional_config=additional_config,
-    )
+    return create_weaviate_client(config)
 
 
 def _delete_by_pack_name(collection, pack_name: str) -> int:

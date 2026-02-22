@@ -3,12 +3,11 @@
 import logging
 import os
 
-import weaviate
 from weaviate.classes.config import DataType, Property
-from weaviate.config import AdditionalConfig, Timeout
 
 from neoflow.config import Config
 from neoflow.importer.code_indexer import chunk_content
+from neoflow.weaviate_client import create_weaviate_client
 
 logger = logging.getLogger(__name__)
 
@@ -44,16 +43,7 @@ def _ensure_pack_name_property(collection):
 
 def _connect_weaviate(config: Config):
     """Create a Weaviate client connection."""
-    wv = config.weaviate
-    return weaviate.connect_to_local(
-        additional_config=AdditionalConfig(
-            timeout=Timeout(
-                init=wv.timeout_init,
-                query=wv.timeout_query,
-                insert=wv.timeout_insert,
-            )
-        )
-    )
+    return create_weaviate_client(config)
 
 
 def import_documentation(doc_path: str, config: Config, pack_name: str = "manual-import"):

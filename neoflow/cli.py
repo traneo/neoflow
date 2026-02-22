@@ -18,6 +18,7 @@ from neoflow.config import Config
 from neoflow.init import bootstrap_user_resource_folders
 from neoflow.status_bar import StatusBar, status_context
 from neoflow.template import load_template, run_template_form, TemplateError
+from neoflow.weaviate_client import create_weaviate_client
 from neoflow.knowledge_pack import (
     MANIFEST_FILENAME,
     MANUAL_IMPORT_PACK_NAME,
@@ -53,15 +54,8 @@ def _setup_logging(verbose: bool = False, info : bool = False, stderr_only: bool
 
 def _check_services(config: Config):
     """Verify that Weaviate and Ollama are reachable."""
-    import weaviate
-    from weaviate.config import AdditionalConfig, Timeout
-
     try:
-        client = weaviate.connect_to_local(
-            additional_config=AdditionalConfig(
-                timeout=Timeout(init=5, query=5, insert=5)
-            )
-        )
+        client = create_weaviate_client(config, timeout_init=5, timeout_query=5, timeout_insert=5)
         client.close()
     except Exception:
         console.print("[red bold]Cannot connect to Weaviate.[/red bold]")
@@ -93,33 +87,7 @@ def _check_services(config: Config):
 
 
 def _weaviate_client(config: Config):
-    import weaviate
-    from weaviate.config import AdditionalConfig, Timeout
-
-    wv = config.weaviate
-    additional_config = AdditionalConfig(
-        timeout=Timeout(
-            init=wv.timeout_init,
-            query=wv.timeout_query,
-            insert=wv.timeout_insert,
-        )
-    )
-
-    if wv.host in {"localhost", "127.0.0.1"}:
-        return weaviate.connect_to_local(
-            port=wv.port,
-            additional_config=additional_config,
-        )
-
-    return weaviate.connect_to_custom(
-        http_host=wv.host,
-        http_port=wv.port,
-        http_secure=False,
-        grpc_host=wv.host,
-        grpc_port=50051,
-        grpc_secure=False,
-        additional_config=additional_config,
-    )
+    return create_weaviate_client(config)
 
 
 def cmd_search(args, config: Config):
@@ -1157,6 +1125,27 @@ def main():
     # Apply CLI provider override
     if args.provider:
         config.llm_provider.provider = args.provider
+
+    # Instantiate LLM provider instance
+    from neoflow.llm_provider import OpenAIProvider, OllamaProvider, VLLMProvider
+    provider = config.llm_provider.provider
+    if provider == "openai":
+        config.llm_provider_instance = OpenAIProvider(
+            api_key=config.llm_provider.openai_api_key,
+            api_base=config.llm_provider.openai_api_base
+        )
+    elif provider == "ollama":
+        config.llm_provider_instance = OllamaProvider(
+            endpoint=config.llm_provider.ollama_api_url
+        )
+    elif provider == "vllm":
+        config.llm_provider_instance = VLLMProvider(
+            api_url=config.llm_provider.vllm_api_url
+        )
+    else:
+        config.llm_provider_instance = OllamaProvider(
+            endpoint=config.llm_provider.ollama_api_url
+        )
     
     commands = {
         "agent": cmd_agent,

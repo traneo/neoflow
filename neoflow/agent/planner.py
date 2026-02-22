@@ -50,7 +50,15 @@ class Planner:
         if not self._config.agent.planning_enabled:
             return None
 
-        model = self._config.llm_provider.ollama_model
+        provider = self._config.llm_provider.provider
+        if provider == "openai":
+            model = self._config.llm_provider.openai_model
+        elif provider == "ollama":
+            model = self._config.llm_provider.ollama_model
+        elif provider == "vllm":
+            model = self._config.llm_provider.vllm_model
+        else:
+            model = self._config.llm_provider.ollama_model  # fallback
 
         # Step 1: Analyze whether planning is needed
         self._bar.set_loading(True, "Analyzing task...")
@@ -144,14 +152,36 @@ class Planner:
 
     def _call_llm(self, model: str, prompt: str) -> str:
         """Call the LLM with a single user message and return the response text."""
-        response = run_llm_with_cancel(
-            lambda: ollama.chat(
-                model=model,
-                messages=[{"role": "user", "content": prompt}],
-            ),
-            status_bar=self._bar,
-        )
-        return response["message"]["content"]
+        provider = self._config.llm_provider.provider
+        messages = [{"role": "user", "content": prompt}]
+        llm = getattr(self._config, "llm_provider_instance", None)
+        if provider == "openai":
+            response = run_llm_with_cancel(
+                lambda: llm.create_chat_completion(
+                    messages=messages,
+                    model=model
+                ),
+                status_bar=self._bar,
+            )
+            return response["choices"][0]["message"]["content"]
+        elif provider == "vllm":
+            response = run_llm_with_cancel(
+                lambda: llm.create_chat_completion(
+                    messages=messages,
+                    model=model
+                ),
+                status_bar=self._bar,
+            )
+            return response["choices"][0]["message"]["content"]
+        else:  # ollama or fallback
+            response = run_llm_with_cancel(
+                lambda: llm.create_chat_completion(
+                    messages=messages,
+                    model=model
+                ),
+                status_bar=self._bar,
+            )
+            return response["choices"][0]["message"]["content"]
 
     def _parse_json(self, text: str) -> dict | None:
         """Extract a JSON object from fenced ```json blocks or raw JSON."""

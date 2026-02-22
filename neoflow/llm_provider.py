@@ -60,6 +60,8 @@ class OllamaProvider(LLMProvider):
             self.endpoint = "http://ollama:11434"
         self._fallback_endpoint = "http://localhost:11434"
 
+        self.is_available()  # Check availability on init and log result
+
     def get_name(self) -> str:
         return "ollama"
 
@@ -75,6 +77,7 @@ class OllamaProvider(LLMProvider):
                 if response.status_code == 200:
                     return True
             except Exception:
+                logger.debug(f"Ollama not available at {self.endpoint}; trying fallback endpoint {self._fallback_endpoint}")    
                 pass
 
             # Try fallback endpoint (localhost)
@@ -86,6 +89,7 @@ class OllamaProvider(LLMProvider):
                     self.endpoint = self._fallback_endpoint
                     return True
             except Exception:
+                logger.debug(f"Ollama not available at fallback endpoint {self._fallback_endpoint}")
                 pass
 
             return False

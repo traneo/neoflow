@@ -159,6 +159,10 @@ NeoFlow uses environment variables and defaults from [config.py](../neoflow/conf
 # Weaviate connection
 export WEAVIATE_HOST=localhost
 export WEAVIATE_PORT=8080
+export WEAVIATE_GRPC_HOST=
+export WEAVIATE_GRPC_PORT=50051
+export WEAVIATE_HTTP_SECURE=false
+export WEAVIATE_GRPC_SECURE=false
 
 
 # LLM provider selection

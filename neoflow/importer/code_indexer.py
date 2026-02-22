@@ -6,11 +6,10 @@ import re
 import tempfile
 import zipfile
 
-import weaviate
 from weaviate.classes.config import DataType, Property
-from weaviate.config import AdditionalConfig, Timeout
 
 from neoflow.config import Config
+from neoflow.weaviate_client import create_weaviate_client
 
 logger = logging.getLogger(__name__)
 
@@ -216,16 +215,7 @@ def chunk_content(content: str, chunk_size_bytes: int) -> list[str]:
 
 
 def _connect_weaviate(config: Config):
-    wv = config.weaviate
-    return weaviate.connect_to_local(
-        additional_config=AdditionalConfig(
-            timeout=Timeout(
-                init=wv.timeout_init,
-                query=wv.timeout_query,
-                insert=wv.timeout_insert,
-            )
-        )
-    )
+    return create_weaviate_client(config)
 
 
 def _create_code_snippets_collection(client, config: Config):

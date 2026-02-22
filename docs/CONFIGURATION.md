@@ -84,6 +84,10 @@ On first run, NeoFlow bootstraps these folders by copying bundled defaults into
 class WeaviateConfig:
     host: str = "localhost"
     port: int = 8080
+  grpc_host: str = ""
+  grpc_port: int = 50051
+  http_secure: bool = False
+  grpc_secure: bool = False
     timeout_init: int = 20
     timeout_query: int = 480
     timeout_insert: int = 120
@@ -93,11 +97,19 @@ class WeaviateConfig:
 ```bash
 WEAVIATE_HOST=localhost     # Weaviate hostname
 WEAVIATE_PORT=8080          # Weaviate port
+WEAVIATE_GRPC_HOST=         # Optional gRPC hostname (defaults to WEAVIATE_HOST)
+WEAVIATE_GRPC_PORT=50051    # Weaviate gRPC port
+WEAVIATE_HTTP_SECURE=false  # Use HTTPS for REST API
+WEAVIATE_GRPC_SECURE=false  # Use TLS for gRPC
 ```
 
 **Description:**
 - `host`: Weaviate server hostname or IP
 - `port`: Weaviate server port
+- `grpc_host`: Optional gRPC host override (defaults to `host` when empty)
+- `grpc_port`: Weaviate gRPC port
+- `http_secure`: Enable HTTPS for Weaviate REST API
+- `grpc_secure`: Enable TLS for Weaviate gRPC
 - `timeout_init`: Connection timeout (seconds)
 - `timeout_query`: Query timeout (seconds)
 - `timeout_insert`: Insert timeout (seconds)
@@ -110,6 +122,7 @@ class ImporterConfig:
     tickets_dir: str = "tickets"
     batch_size: int = 300
     max_workers: int = 20
+  max_file_size_bytes: int = 1_000_000
 ```
 
 **Environment Variables:**
@@ -117,12 +130,14 @@ class ImporterConfig:
 IMPORTER_TICKETS_DIR=tickets
 IMPORTER_BATCH_SIZE=300
 IMPORTER_MAX_WORKERS=20
+IMPORTER_MAX_FILE_SIZE_BYTES=1000000
 ```
 
 **Description:**
 - `tickets_dir`: Directory containing ticket JSON files
 - `batch_size`: Number of records per batch insert
 - `max_workers`: Parallel workers for processing
+- `max_file_size_bytes`: Maximum file size allowed during code/document import
 
 ### Agent Configuration
 
@@ -295,6 +310,10 @@ Complete list of all environment variables:
 ```bash
 WEAVIATE_HOST=localhost
 WEAVIATE_PORT=8080
+WEAVIATE_GRPC_HOST=
+WEAVIATE_GRPC_PORT=50051
+WEAVIATE_HTTP_SECURE=false
+WEAVIATE_GRPC_SECURE=false
 ```
 
 ### LLM Provider
@@ -349,6 +368,7 @@ SERVER_MAX_SESSIONS=100
 IMPORTER_TICKETS_DIR=tickets
 IMPORTER_BATCH_SIZE=300
 IMPORTER_MAX_WORKERS=20
+IMPORTER_MAX_FILE_SIZE_BYTES=1000000
 ```
 
 ### Other
@@ -364,6 +384,10 @@ REPORTS_DIR=reports
 # .env
 WEAVIATE_HOST=localhost
 WEAVIATE_PORT=8080
+WEAVIATE_GRPC_HOST=
+WEAVIATE_GRPC_PORT=50051
+WEAVIATE_HTTP_SECURE=false
+WEAVIATE_GRPC_SECURE=false
 
 LLM_PROVIDER=ollama
 OLLAMA_API_URL=http://localhost:11434
@@ -380,6 +404,10 @@ AGENT_PLANNING_ENABLED=true
 # .env
 WEAVIATE_HOST=weaviate.prod.example.com
 WEAVIATE_PORT=443
+WEAVIATE_HTTP_SECURE=true
+WEAVIATE_GRPC_HOST=weaviate.prod.example.com
+WEAVIATE_GRPC_PORT=443
+WEAVIATE_GRPC_SECURE=true
 
 LLM_PROVIDER=vllm
 VLLM_API_URL=http://vllm-cluster:8000
@@ -407,6 +435,10 @@ OPENAI_MODEL=gpt-4o-mini
 # Rest defaults
 WEAVIATE_HOST=localhost
 WEAVIATE_PORT=8080
+WEAVIATE_GRPC_HOST=
+WEAVIATE_GRPC_PORT=50051
+WEAVIATE_HTTP_SECURE=false
+WEAVIATE_GRPC_SECURE=false
 ```
 
 ### Example 4: Docker Compose
@@ -415,6 +447,10 @@ WEAVIATE_PORT=8080
 # .env for docker-compose.yaml
 WEAVIATE_HOST=weaviate
 WEAVIATE_PORT=8080
+WEAVIATE_GRPC_HOST=
+WEAVIATE_GRPC_PORT=50051
+WEAVIATE_HTTP_SECURE=false
+WEAVIATE_GRPC_SECURE=false
 
 OLLAMA_API_URL=http://ollama:11434
 OLLAMA_MODEL=qwen3-coder:latest
@@ -432,6 +468,10 @@ metadata:
 data:
   WEAVIATE_HOST: "weaviate-service"
   WEAVIATE_PORT: "8080"
+  WEAVIATE_GRPC_HOST: ""
+  WEAVIATE_GRPC_PORT: "50051"
+  WEAVIATE_HTTP_SECURE: "false"
+  WEAVIATE_GRPC_SECURE: "false"
   LLM_PROVIDER: "vllm"
   VLLM_API_URL: "http://vllm-service:8000"
   SERVER_HOST: "0.0.0.0"

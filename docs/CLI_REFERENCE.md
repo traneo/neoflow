@@ -480,6 +480,18 @@ NeoFlow respects the following environment variables:
 ```bash
 WEAVIATE_HOST=localhost
 WEAVIATE_PORT=8080
+WEAVIATE_GRPC_HOST=
+WEAVIATE_GRPC_PORT=50051
+WEAVIATE_HTTP_SECURE=false
+WEAVIATE_GRPC_SECURE=false
+```
+
+### Importer Configuration
+```bash
+IMPORTER_TICKETS_DIR=tickets
+IMPORTER_BATCH_SIZE=300
+IMPORTER_MAX_WORKERS=20
+IMPORTER_MAX_FILE_SIZE_BYTES=1000000
 ```
 
 ### LLM Provider Configuration

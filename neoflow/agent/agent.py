@@ -672,7 +672,7 @@ def _execute_action(action: dict, config: Config, console: Console | None = None
 def _run_command(command: str, unsafe_mode: bool = False) -> str:
     if unsafe_mode:
         # Unsafe mode: allow shell=True for more flexible command execution
-        Console.warn("[yellow]Running command in unsafe mode (shell=True)[/yellow]")
+        # Console.warn("[yellow]Running command in unsafe mode (shell=True)[/yellow]")
         result = subprocess.run(
             command,
             shell=True,

@@ -6,6 +6,10 @@ from dataclasses import dataclass, field
 class WeaviateConfig:
     host: str = "localhost"
     port: int = 8080
+    grpc_host: str = ""
+    grpc_port: int = 50051
+    http_secure: bool = False
+    grpc_secure: bool = False
     timeout_init: int = 20
     timeout_query: int = 480
     timeout_insert: int = 120
@@ -55,12 +59,12 @@ class LLMProviderConfig:
     """
     provider: str = "auto"  # 'auto', 'openai', 'vllm', 'ollama'
     openai_api_key: str = ""
-    openai_api_base: str = ""
+    openai_api_base: str = "https://api.openai.com/v1"
     openai_model: str = "gpt-4o-mini"
     vllm_api_url: str = "http://vllm:8000"
     vllm_model: str = "meta-llama/Llama-2-13b-chat-hf"
     ollama_api_url: str = "http://ollama:11434"
-    ollama_model: str = "glm-4.7-flash"
+    ollama_model: str = "llama3.1:latest"
     embedding_model: str = "nomic-embed-text"
     chunk_size_bytes: int = 2_000
 
@@ -116,6 +120,10 @@ class Config:
 # -----------------------
 WEAVIATE_HOST=localhost
 WEAVIATE_PORT=8080
+WEAVIATE_GRPC_HOST=
+WEAVIATE_GRPC_PORT=50051
+WEAVIATE_HTTP_SECURE=false
+WEAVIATE_GRPC_SECURE=false
 
 # -----------------------
 # Importer Configuration
@@ -197,6 +205,14 @@ CHUNK_SIZE_BYTES=2000
         config = cls()
         config.weaviate.host = os.getenv("WEAVIATE_HOST", config.weaviate.host)
         config.weaviate.port = int(os.getenv("WEAVIATE_PORT", config.weaviate.port))
+        config.weaviate.grpc_host = os.getenv("WEAVIATE_GRPC_HOST", config.weaviate.grpc_host)
+        config.weaviate.grpc_port = int(os.getenv("WEAVIATE_GRPC_PORT", config.weaviate.grpc_port))
+        config.weaviate.http_secure = os.getenv(
+            "WEAVIATE_HTTP_SECURE", str(config.weaviate.http_secure)
+        ).lower() in ("true", "1", "yes")
+        config.weaviate.grpc_secure = os.getenv(
+            "WEAVIATE_GRPC_SECURE", str(config.weaviate.grpc_secure)
+        ).lower() in ("true", "1", "yes")
         config.importer.max_file_size_bytes = int(os.getenv(
             "IMPORTER_MAX_FILE_SIZE_BYTES", config.importer.max_file_size_bytes
         ))
