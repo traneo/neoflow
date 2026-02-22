@@ -26,6 +26,35 @@ Respond with a JSON object:
 ``` 
 """
 
+PLANNING_CONTEXT_PROMPT = """Before planning the following task, determine what files (if any) must be read to create an accurate plan.
+
+# Task
+{task}
+
+# Instructions
+
+Only list files that are:
+- Directly and specifically implied by the task (e.g. "refactor the auth module" → auth module files)
+- Very likely to exist in the workspace
+- Required to understand WHAT to change, not just WHERE
+
+Do NOT list files if:
+- The task is abstract or can be planned without reading source code
+- You are guessing — only list files you are confident exist
+- The task is already fully self-contained
+
+# Response Format
+Respond with a JSON object:
+```json{{
+  "needs_file_context": true or false,
+  "files": ["relative/path/to/file.py"],
+  "reason": "Brief explanation"
+}}
+```
+
+If no files are needed, respond with `"needs_file_context": false` and an empty `files` list.
+"""
+
 PLANNING_GENERATION_PROMPT = """Generate a detailed plan and task list for the following task.
 
 # Task
@@ -128,9 +157,39 @@ Execute a shell command and capture output (30-second timeout).
 ```
 **Safety:** Never run destructive commands (rm -rf, system modifications). Use non-interactive modes for CLI tools.
 
-### Forbidden file-tool actions
-Do not emit `read_file`, `write_file`, `edit_file`, or any non-listed tool action. These actions are not available in this runtime.
-If you need to inspect files, use `run_command` with read-only commands such as `sed -n`, `head`, `tail`, `cat`, or `grep`.
+## File Operations
+
+Use these tools for all file creation, reading, editing, and deletion. They are more reliable than embedding file content inside shell commands because they require only standard JSON string escaping.
+
+### write_file
+Create or overwrite a file with the given content. Parent directories are created automatically.
+```json
+{"action": "write_file", "path": "src/utils/helpers.py", "content": "def greet(name):\n    return f\"Hello, {name}!\"\n"}
+```
+**Required:** `path` (relative to workspace root), `content` (the full file text)
+
+### read_file
+Read a file and return its content with line numbers.
+```json
+{"action": "read_file", "path": "src/utils/helpers.py"}
+```
+**Optional:** `offset` (first line to return, 0-based, default 0), `limit` (max lines to return, default 200)
+**Use when:** You need to inspect a file before editing, or verify a write succeeded.
+
+### edit_file
+Replace an exact substring in a file with new text. The `old_string` must appear **exactly once** — if it appears multiple times, add more surrounding lines to make it unique.
+```json
+{"action": "edit_file", "path": "src/utils/helpers.py", "old_string": "def greet(name):\n    return f\"Hello, {name}!\"\n", "new_string": "def greet(name: str) -> str:\n    return f\"Hi, {name}!\"\n"}
+```
+**Required:** `path`, `old_string` (exact text to replace), `new_string` (replacement text)
+**Tip:** Always `read_file` first so you can copy the exact whitespace and indentation into `old_string`.
+
+### delete_file
+Delete a single file.
+```json
+{"action": "delete_file", "path": "src/utils/old_helpers.py"}
+```
+**Required:** `path`
 
 ## Agent Notebook
 
@@ -154,6 +213,19 @@ Remove an outdated or incorrect entry by exact title.
 ```json
 {"action": "notebook_remove", "title": "Docker Compose Dev Setup"}
 ```
+
+## Task Management (multi-task workflows only)
+
+### mark_task_done
+Signal that a future task has already been completed as a side-effect of the current task.
+The framework will skip that task automatically when it is reached, recording your summary as its resolution.
+```json
+{"action": "mark_task_done", "task_id": "task_3", "summary": "Auth middleware was created in src/middleware/auth.py while implementing task_2."}
+```
+**Required:** `task_id` — the ID shown in the "Remaining after this" list (e.g. `task_2`, `task_3`).
+**Required:** `summary` — what was accomplished; becomes the official resolution for that task.
+**Use when:** While completing your current task you have incidentally implemented what a later task requires.
+Do not call this speculatively — only when the work is genuinely finished and verified.
 
 ## Completion
 
@@ -185,12 +257,14 @@ Signal task completion with a comprehensive summary.
    - Include context: why it works, any prerequisites, gotchas
 
 8. **JSON Validity** — Ensure all action JSON is properly formatted:
-   - Escape quotes: `\"` 
-   - Escape newlines: `\\n`
-   - Escape backslashes: `\\\\`
-   - Test mentally or validate structure before outputting
+   - Escape quotes inside strings: `\"`
+   - Escape newlines inside strings: `\\n`
+   - Escape backslashes inside strings: `\\\\`
+   - Prefer `write_file`/`edit_file` over embedding file content in `run_command` — it requires only standard JSON escaping with no shell layer.
 
 9. **Never Use** Harmony format request and response structures. Always use the specified JSON action format.
+
+10. **Verify File Operations** — After `write_file`, `edit_file`, or `delete_file`, the result message confirms success or describes the error. If the result is an error, do not assume the operation succeeded. Use `read_file` to verify the final state when in doubt.
 
 # Best Practices
 

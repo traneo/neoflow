@@ -156,24 +156,26 @@ def _agent_prompt_impl(
             Panel(body, title=modal_title or "Action Required", border_style=modal_style),
         )
 
-    # Pause any active status bar for each prompt attempt to avoid ANSI conflicts.
+    # Pause the status bar once for the entire interaction to avoid ANSI conflicts
+    # with prompt_toolkit. Pausing inside the retry loop would cause rapid
+    # Live stop/start cycles (each writing escape sequences) that corrupt terminal state.
     bar = _active_status_bar.get()
+    if bar is not None:
+        bar.pause()
     try:
         while True:
-            if bar is not None:
-                bar.pause()
             try:
                 answer = _agent_session.prompt(HTML(f"<b>{message}</b>{suffix}")).strip()
-            finally:
-                if bar is not None:
-                    bar.resume()
+            except (KeyboardInterrupt, EOFError):
+                raise AgentCancelled()
 
             if not answer and default:
                 return default
             if choices is None or answer in choices:
                 return answer
-    except (KeyboardInterrupt, EOFError):
-        raise AgentCancelled()
+    finally:
+        if bar is not None:
+            bar.resume()
 
 
 def agent_prompt(

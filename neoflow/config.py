@@ -41,6 +41,9 @@ class AgentConfig:
     compression_min_chars: int = 5000   # Minimum characters to trigger compression
     # Command execution settings
     unsafe_mode: bool = False  # When True, bypasses run_command approvals and uses shell=True
+    # Pre-planning file context settings
+    planning_context_max_files: int = 5          # Max files read before planning
+    planning_context_max_lines: int = 2000       # Total-line pool shared across all context files
 
 
 @dataclass
@@ -149,6 +152,8 @@ AGENT_COMPRESSION_ENABLED=true
 AGENT_COMPRESSION_MIN_TOKENS=1000
 AGENT_COMPRESSION_MIN_CHARS=5000
 AGENT_UNSAFE_MODE=false
+AGENT_PLANNING_CONTEXT_MAX_FILES=5
+AGENT_PLANNING_CONTEXT_MAX_LINES=2000
 
 # -----------------------
 # Chat Configuration
@@ -257,6 +262,12 @@ CHUNK_SIZE_BYTES=2000
         config.agent.unsafe_mode = os.getenv(
             "AGENT_UNSAFE_MODE", "false"
         ).lower() in ("true", "1", "yes")
+        config.agent.planning_context_max_files = int(os.getenv(
+            "AGENT_PLANNING_CONTEXT_MAX_FILES", config.agent.planning_context_max_files
+        ))
+        config.agent.planning_context_max_lines = int(os.getenv(
+            "AGENT_PLANNING_CONTEXT_MAX_LINES", config.agent.planning_context_max_lines
+        ))
         config.chat.save_history = os.getenv(
             "CHAT_SAVE_HISTORY", "true"
         ).lower() in ("true", "1", "yes")

@@ -3,6 +3,7 @@ import os
 import re
 import shlex
 import subprocess
+from pathlib import Path
 
 from anyio import sleep
 
@@ -40,6 +41,10 @@ def _safe_console_print(console: Console, status_bar: StatusBar | None, *args, *
 # Tools allowed in agent mode
 _AGENT_TOOLS = {
     "run_command",
+    "write_file",
+    "read_file",
+    "edit_file",
+    "delete_file",
     "search_code",
     "search_documentation",
     "search_tickets",
@@ -48,6 +53,7 @@ _AGENT_TOOLS = {
     "notebook_search",
     "notebook_add",
     "notebook_remove",
+    "mark_task_done",
     "done",
 }
 
@@ -98,12 +104,16 @@ def run_agent(task: str, config: Config, console: Console, bar: StatusBar | None
     
     # Initialize task executor for resolution tracking
     task_executor = TaskExecutor(config)
-    
+
+    # Shared state: tasks marked done ahead-of-schedule by earlier task agents.
+    # Maps task_id (e.g. "task_3") -> summary string.
+    pre_completed: dict[str, str] = {}
+
     # Planning phase: analyze the task and optionally generate a plan
     planner = Planner(config, bar, console)
     task_queue = planner.maybe_plan(cleaned_task, system_prompt)
 
-    # Fix 4: always initialize resolution tracking from the plan — no extra LLM call
+    # always initialize resolution tracking from the plan — no extra LLM call
     if task_queue is not None:
         task_executor.initialize_from_task_queue(cleaned_task, task_queue)
 
@@ -115,20 +125,40 @@ def run_agent(task: str, config: Config, console: Console, bar: StatusBar | None
         if task_queue is not None:
             # Task-by-task execution: process one task at a time
             task_results = {}  # Store results for resolution tracking
-            shared_discoveries = ""  # Fix 6: cross-task discoveries scratchpad
+            shared_discoveries = ""  # cross-task discoveries scratchpad
 
             for i, task_desc in enumerate(task_queue.tasks):
                 bar.start_task(i)
                 task_id = f"task_{i+1}"
+
+                # Skip tasks already completed ahead-of-schedule by a previous agent.
+                if task_id in pre_completed:
+                    pre_done_summary = pre_completed[task_id]
+                    _safe_console_print(
+                        console, bar,
+                        f"\n[bold green]--- Task {i + 1}/{len(task_queue.tasks)}: {task_desc} "
+                        f"[already completed] ---[/bold green]",
+                    )
+                    task_executor.record_task_resolution(
+                        task_id,
+                        task_desc,
+                        pre_done_summary,
+                        notes="Completed ahead of schedule by a previous task.",
+                    )
+                    bar.complete_task(i)
+                    continue
+
                 _safe_console_print(console, bar, f"\n[bold cyan]--- Task {i + 1}/{len(task_queue.tasks)}: {task_desc} ---[/bold cyan]")
 
-                # Fix 1: inject plan overview and task progress so the agent
+                # inject plan overview and task progress so the agent
                 # knows what was done, what it must do now, and what comes next.
                 completed_items = "\n".join(
-                    f"  ✓ Task {j+1}: {t}" for j, t in enumerate(task_queue.tasks[:i])
+                    f"  ✓ [{('task_' + str(j+1))}] Task {j+1}: {t}"
+                    + (" *(completed ahead of schedule)*" if f"task_{j+1}" in pre_completed else "")
+                    for j, t in enumerate(task_queue.tasks[:i])
                 ) if i > 0 else "  (none yet)"
                 remaining_items = "\n".join(
-                    f"  • Task {j+i+2}: {t}" for j, t in enumerate(task_queue.tasks[i+1:])
+                    f"  • [task_{j+i+2}] Task {j+i+2}: {t}" for j, t in enumerate(task_queue.tasks[i+1:])
                 ) if i < len(task_queue.tasks) - 1 else "  (none)"
 
                 plan_section = (
@@ -139,7 +169,7 @@ def run_agent(task: str, config: Config, console: Console, bar: StatusBar | None
                     f"Remaining after this:\n{remaining_items}"
                 )
 
-                # Fix 6: share key discoveries accumulated from previous tasks
+                # share key discoveries accumulated from previous tasks
                 discoveries_section = (
                     "\n\n## Cross-Task Discoveries\n"
                     "The following was learned in previous tasks — use this context "
@@ -147,7 +177,7 @@ def run_agent(task: str, config: Config, console: Console, bar: StatusBar | None
                     + shared_discoveries
                 ) if shared_discoveries else ""
 
-                # Fix 2: always include previous resolutions — no conditional gate
+                # always include previous resolutions — no conditional gate
                 prev_resolutions = task_executor.get_previous_resolutions_context()
                 resolutions_section = (
                     f"\n\n## Previous Task Resolutions\n{prev_resolutions}"
@@ -190,11 +220,12 @@ def run_agent(task: str, config: Config, console: Console, bar: StatusBar | None
                             task_optimizer,
                             task_loop_detector,
                             query_confirmation_state,
+                            pre_completed=pre_completed,
                         )
                 except _AgentDone as done:
                     if done.result:
                         task_results[task_id] = done.result
-                        # Fix 3: extract key findings from full message history
+                        # extract key findings from full message history
                         discoveries = TaskExecutor.extract_discoveries_from_messages(messages)
                         task_executor.record_task_resolution(
                             task_id,
@@ -202,7 +233,7 @@ def run_agent(task: str, config: Config, console: Console, bar: StatusBar | None
                             done.result,
                             notes=discoveries,
                         )
-                        # Fix 6: append discoveries to cross-task scratchpad
+                        # append discoveries to cross-task scratchpad
                         if discoveries:
                             shared_discoveries += (
                                 f"\n### Task {i+1}: {task_desc[:60]}\n{discoveries}\n"
@@ -267,6 +298,7 @@ def _agent_step(
     optimizer: ContextOptimizer,
     loop_detector: LoopDetector | None,
     query_confirmation_state: dict[str, bool],
+    pre_completed: dict[str, str] | None = None,
 ) -> str | None:
     """Execute one iteration of the agent loop.
 
@@ -365,19 +397,11 @@ def _agent_step(
     # Validate tool is allowed
     if act_name not in _AGENT_TOOLS:
         available = ", ".join(sorted(_AGENT_TOOLS - {"done"}))
-        if act_name == "read_file":
-            reject_msg = (
-                "Action 'read_file' is not available in this agent runtime and must not be used. "
-                "To inspect files, use 'run_command' with safe read-only commands (for example: "
-                "sed -n '1,120p path/to/file.py', head, tail, cat, or grep). "
-                f"Available actions: {available}, done."
-            )
-        else:
-            reject_msg = (
-                f"Action '{act_name}' is not available. "
-                f"Available actions: {available}, done. "
-                "Please choose one of the available actions."
-            )
+        reject_msg = (
+            f"Action '{act_name}' is not available. "
+            f"Available actions: {available}, done. "
+            "Please choose one of the available actions."
+        )
         optimizer.add_message(messages, {"role": "user", "content": reject_msg})
         optimizer.optimize(messages)
         status_bar.increment_messages()
@@ -445,7 +469,7 @@ def _agent_step(
 
     # Execute the action
     status_bar.set_loading(True, f"Executing {act_name}...")
-    result = _execute_action(action, config, console, status_bar)
+    result = _execute_action(action, config, console, status_bar, pre_completed=pre_completed)
     status_bar.set_loading(False)
 
     # Add result to status bar
@@ -480,6 +504,12 @@ def _agent_step(
     _safe_console_print(console, status_bar, f"  [dim]= {first_line}{line_info}[/dim]")
 
     result_msg = f"Action result:\n{result}"
+    if act_name == "run_command" and result.startswith("COMMAND FAILED"):
+        result_msg += (
+            "\n\n⚠️  The command above FAILED. "
+            "Do NOT assume the operation succeeded or move on as if it did. "
+            "Read the error output carefully, then either correct the command or try a different approach."
+        )
     optimizer.add_message(
         messages,
         {"role": "user", "content": result_msg},
@@ -491,6 +521,10 @@ def _agent_step(
 
 _ACTION_ICONS = {
     "run_command": "💻",
+    "write_file": "✍️",
+    "read_file": "📖",
+    "edit_file": "🖊️",
+    "delete_file": "🗑️",
     "search_code": "🔎",
     "search_documentation": "📚",
     "search_tickets": "🎫",
@@ -499,11 +533,16 @@ _ACTION_ICONS = {
     "notebook_search": "🔖",
     "notebook_add": "📝",
     "notebook_remove": "🗑️",
+    "mark_task_done": "☑️",
     "done": "✅",
 }
 
 _ACTION_LABELS = {
     "run_command": "Run Command",
+    "write_file": "Write File",
+    "read_file": "Read File",
+    "edit_file": "Edit File",
+    "delete_file": "Delete File",
     "search_code": "Search Code",
     "search_documentation": "Search Documentation",
     "search_tickets": "Search Tickets",
@@ -512,12 +551,17 @@ _ACTION_LABELS = {
     "notebook_search": "Notebook Search",
     "notebook_add": "Notebook Add",
     "notebook_remove": "Notebook Remove",
+    "mark_task_done": "Mark Task Done",
     "done": "Done",
 }
 
 # Maps each action to the key of its primary parameter for compact display
 _ACTION_PRIMARY_PARAM = {
     "run_command": "command",
+    "write_file": "path",
+    "read_file": "path",
+    "edit_file": "path",
+    "delete_file": "path",
     "search_code": "query",
     "search_documentation": "query",
     "search_tickets": "query",
@@ -525,6 +569,7 @@ _ACTION_PRIMARY_PARAM = {
     "notebook_search": "query",
     "notebook_add": "title",
     "notebook_remove": "title",
+    "mark_task_done": "task_id",
     "done": "summary",
 }
 
@@ -650,12 +695,40 @@ class _AgentDone(Exception):
 
 
 
-def _execute_action(action: dict, config: Config, console: Console | None = None, status_bar: StatusBar | None = None) -> str:
+def _execute_action(
+    action: dict,
+    config: Config,
+    console: Console | None = None,
+    status_bar: StatusBar | None = None,
+    pre_completed: dict[str, str] | None = None,
+) -> str:
     """Execute a parsed action and return the result as a string."""
     act = action.get("action")
     try:
-        if act == "run_command":
+        if act == "mark_task_done":
+            task_id = action.get("task_id", "").strip()
+            summary = action.get("summary", "Completed as part of this task.")
+            if not task_id:
+                return "Error: mark_task_done requires a 'task_id' field."
+            if pre_completed is None:
+                return "Error: mark_task_done is only available in multi-task workflows."
+            pre_completed[task_id] = summary
+            logger.info("Task '%s' marked done ahead of schedule.", task_id)
+            return f"Task '{task_id}' recorded as already done. It will be skipped when reached."
+        elif act == "run_command":
             return _run_command(action["command"], unsafe_mode=config.agent.unsafe_mode)
+        elif act == "write_file":
+            return _write_file(action["path"], action["content"])
+        elif act == "read_file":
+            return _read_file(
+                action["path"],
+                offset=action.get("offset", 0),
+                limit=action.get("limit", 200),
+            )
+        elif act == "edit_file":
+            return _edit_file(action["path"], action["old_string"], action["new_string"])
+        elif act == "delete_file":
+            return _delete_file(action["path"])
         elif act == "search_code":
             return search_code(
                 action["query"],
@@ -726,14 +799,102 @@ def _run_command(command: str, unsafe_mode: bool = False) -> str:
             timeout=30,
             cwd=os.getcwd(),
         )
-    output = ""
-    if result.stdout:
-        output += result.stdout
-    if result.stderr:
-        output += ("\n" if output else "") + f"STDERR:\n{result.stderr}"
+    stdout = result.stdout or ""
+    stderr = result.stderr or ""
+
     if result.returncode != 0:
-        output += f"\n(exit code: {result.returncode})"
+        parts = [f"COMMAND FAILED (exit code: {result.returncode})"]
+        if stdout:
+            parts.append(f"STDOUT:\n{stdout.rstrip()}")
+        if stderr:
+            parts.append(f"STDERR:\n{stderr.rstrip()}")
+        return "\n".join(parts)
+
+    output = stdout
+    if stderr:
+        output += ("\n" if output else "") + f"STDERR:\n{stderr}"
     return output or "(no output)"
+
+
+def _safe_path(path: str) -> tuple[Path, str | None]:
+    """Resolve path and verify it is inside the working directory.
+
+    Returns (resolved_path, None) on success or (None, error_message) on failure.
+    """
+    cwd = Path(os.getcwd()).resolve()
+    resolved = (cwd / path).resolve()
+    try:
+        resolved.relative_to(cwd)
+    except ValueError:
+        return resolved, f"Error: path '{path}' is outside the working directory."
+    return resolved, None
+
+
+def _write_file(path: str, content: str) -> str:
+    """Write (or overwrite) a file with the given content."""
+    resolved, err = _safe_path(path)
+    if err:
+        return err
+    resolved.parent.mkdir(parents=True, exist_ok=True)
+    resolved.write_text(content)
+    lines = content.count("\n") + (1 if content and not content.endswith("\n") else 0)
+    return f"File written: {path} ({resolved.stat().st_size} bytes, {lines} lines)"
+
+
+def _read_file(path: str, offset: int = 0, limit: int = 200) -> str:
+    """Read a file and return numbered lines."""
+    resolved, err = _safe_path(path)
+    if err:
+        return err
+    if not resolved.is_file():
+        return f"Error: file not found: {path}"
+    lines = resolved.read_text(errors="replace").splitlines(keepends=True)
+    total = len(lines)
+    chunk = lines[offset : offset + limit]
+    numbered = "".join(f"{offset + i + 1:4}: {line}" for i, line in enumerate(chunk))
+    remaining = total - offset - len(chunk)
+    suffix = f"\n[{remaining} more lines — use offset={offset + limit} to continue]" if remaining > 0 else ""
+    return f"File: {path} ({total} lines)\n{numbered}{suffix}"
+
+
+def _edit_file(path: str, old_string: str, new_string: str) -> str:
+    """Replace the first occurrence of old_string with new_string in a file.
+
+    Returns an error if old_string is not found or appears more than once
+    (caller should add more surrounding context to make it unique).
+    """
+    resolved, err = _safe_path(path)
+    if err:
+        return err
+    if not resolved.is_file():
+        return f"Error: file not found: {path}"
+    content = resolved.read_text(errors="replace")
+    count = content.count(old_string)
+    if count == 0:
+        return (
+            f"Error: old_string not found in {path}. "
+            "Verify exact whitespace and indentation — use read_file to inspect the file first."
+        )
+    if count > 1:
+        return (
+            f"Error: old_string found {count} times in {path}. "
+            "Add more surrounding context to make it unique."
+        )
+    resolved.write_text(content.replace(old_string, new_string, 1))
+    return f"File edited: {path}"
+
+
+def _delete_file(path: str) -> str:
+    """Delete a file."""
+    resolved, err = _safe_path(path)
+    if err:
+        return err
+    if not resolved.exists():
+        return f"Error: file not found: {path}"
+    if not resolved.is_file():
+        return f"Error: '{path}' is a directory, not a file."
+    resolved.unlink()
+    return f"File deleted: {path}"
 
 
 def _ask_user(

@@ -94,6 +94,9 @@ class StatusBar:
         """Pause status rendering (used during prompt input)."""
         self._paused = True
         self._stop_live()
+        # Flush any buffered terminal output (escape sequences from the last
+        # render) before prompt_toolkit takes control of the terminal.
+        sys.stdout.flush()
 
     def resume(self) -> None:
         """Resume status rendering after a pause."""
@@ -217,8 +220,10 @@ class StatusBar:
         """Stop Rich live rendering if currently running."""
         with self._draw_lock:
             if self._live is not None:
-                self._live.stop()
-                self._live = None
+                try:
+                    self._live.stop()
+                finally:
+                    self._live = None
 
     # -- Render loop ---------------------------------------------------------
 

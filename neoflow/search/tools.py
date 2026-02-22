@@ -20,56 +20,88 @@ logger = logging.getLogger(__name__)
 # JSON action parsing utilities
 # ---------------------------------------------------------------------------
 
+def _extract_json_objects(text: str):
+    """Yield all top-level JSON objects found in *text* using brace counting.
+
+    This handles nested objects and arrays correctly, unlike a simple regex.
+    """
+    i = 0
+    n = len(text)
+    while i < n:
+        if text[i] != "{":
+            i += 1
+            continue
+        depth = 0
+        in_string = False
+        escape = False
+        start = i
+        for j in range(i, n):
+            ch = text[j]
+            if escape:
+                escape = False
+                continue
+            if ch == "\\" and in_string:
+                escape = True
+                continue
+            if ch == '"':
+                in_string = not in_string
+                continue
+            if in_string:
+                continue
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    yield text[start : j + 1]
+                    i = j + 1
+                    break
+        else:
+            break  # unclosed brace — stop scanning
+
+
 def parse_action(text: str) -> dict | None:
     """Extract a JSON action block from an LLM response."""
     logger = logging.getLogger("parse_action")
-    # 1. Try to find JSON in ```json fences first
+
+    def _try_parse(candidate: str, source: str) -> dict | None:
+        try:
+            result = json.loads(candidate)
+            if isinstance(result, dict) and "action" in result:
+                logger.info("Parsed action from %s.", source)
+                return result
+        except json.JSONDecodeError as e:
+            logger.warning("Failed to parse JSON from %s: %s", source, e)
+        return None
+
+    # 1. ```json fenced block (highest priority — explicitly requested format)
     fence_match = re.search(r"```json\s*\n(.*?)\n\s*```", text, re.DOTALL)
     if fence_match:
-        json_str = fence_match.group(1)
-        logger.debug("Trying to parse JSON from ```json fenced block.")
-        try:
-            result = json.loads(json_str)
-            logger.info("Parsed action from ```json fenced block.")
+        result = _try_parse(fence_match.group(1), "```json fenced block")
+        if result:
             return result
-        except json.JSONDecodeError as e:
-            logger.warning(f"Failed to parse JSON from ```json fenced block: {e}")
 
-    # 2. Try to find JSON in any code block (not just json)
+    # 2. Any code block
     code_block_match = re.search(r"```[a-zA-Z]*\s*\n(.*?)\n\s*```", text, re.DOTALL)
     if code_block_match:
-        code_str = code_block_match.group(1)
-        logger.debug("Trying to parse JSON from generic code block.")
-        try:
-            result = json.loads(code_str)
-            logger.info("Parsed action from generic code block.")
+        result = _try_parse(code_block_match.group(1), "generic code block")
+        if result:
             return result
-        except Exception as e:
-            logger.warning(f"Failed to parse JSON from generic code block: {e}")
 
-    # 3. Try to extract the first valid JSON object anywhere in the text
-    logger.debug("Trying to parse JSON from any object with 'action' key in text.")
-    for match in re.finditer(r"\{[^{}]*\"action\"[^{}]*\}", text):
-        try:
-            parsed = json.loads(match.group())
-            if "action" in parsed:
-                logger.info("Parsed action from loose JSON object in text.")
-                return parsed
-        except json.JSONDecodeError as e:
-            logger.warning(f"Failed to parse JSON object from text: {e}")
-            continue
+    # 3. Brace-counting scan — handles nested objects and multiline content
+    logger.debug("Trying brace-counting scan for JSON object with 'action' key.")
+    for candidate in _extract_json_objects(text):
+        result = _try_parse(candidate, "brace-counted object")
+        if result:
+            return result
 
-    # 4. Try to fix common JSON issues (single quotes, trailing commas)
+    # 4. Fix common cosmetic issues (single quotes, trailing commas) then retry
     logger.debug("Trying to fix common JSON issues in text.")
-    fixed_text = text.replace("'", '"')
-    fixed_text = re.sub(r',\s*([}\]])', r'\1', fixed_text)  # remove trailing commas
-    try:
-        parsed = json.loads(fixed_text)
-        if isinstance(parsed, dict) and "action" in parsed:
-            logger.info("Parsed action from fixed JSON text.")
-            return parsed
-    except Exception as e:
-        logger.warning(f"Failed to parse after fixing common JSON issues: {e}")
+    fixed = re.sub(r",\s*([}\]])", r"\1", text.replace("'", '"'))
+    for candidate in _extract_json_objects(fixed):
+        result = _try_parse(candidate, "fixed JSON object")
+        if result:
+            return result
 
     logger.debug("Failed to parse any action from response text.")
     return None

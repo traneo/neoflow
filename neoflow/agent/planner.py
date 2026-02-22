@@ -10,15 +10,16 @@ import logging
 import os
 import re
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import ollama
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 
-from neoflow.agent.input import run_llm_with_cancel
+from neoflow.agent.input import AgentCancelled, agent_prompt, run_llm_with_cancel
 from neoflow.config import Config
-from neoflow.prompts import PLANNING_ANALYSIS_PROMPT, PLANNING_GENERATION_PROMPT
+from neoflow.prompts import PLANNING_ANALYSIS_PROMPT, PLANNING_CONTEXT_PROMPT, PLANNING_GENERATION_PROMPT
 from neoflow.status_bar import StatusBar, estimate_tokens, safe_console_print
 
 logger = logging.getLogger(__name__)
@@ -73,11 +74,15 @@ class Planner:
             logger.info("Planner: skipping planning for this task")
             return None
 
+        # Step 1.5: Gather file context before generating the plan so the
+        # planner has real code to reason about instead of planning blind.
+        context_section = self._gather_file_context(task, model)
+
         # Step 2: Generate plan and task list
         self._bar.set_loading(True, "Generating plan...")
         generation = self._call_llm(
             model,
-            PLANNING_GENERATION_PROMPT.format(task=task),
+            self._build_generation_prompt(task, context_section),
         )
         self._bar.set_loading(False)
 
@@ -149,6 +154,172 @@ class Planner:
                 if desc:
                     tasks.append(desc)
         return tasks
+
+    def _gather_file_context(self, task: str, model: str) -> str:
+        """Ask the LLM which files are needed to plan this task, read them, and
+        return a formatted context block ready for injection into the planning prompt.
+
+        The total lines across all files are treated as a shared pool (configured
+        via ``AGENT_PLANNING_CONTEXT_MAX_LINES``).  When the files exceed the pool,
+        the user is warned and asked to confirm before proceeding with proportionally
+        truncated content.  Returning an empty string falls through to blind planning.
+        """
+        self._bar.set_loading(True, "Gathering file context for planning...")
+        raw = self._call_llm(model, PLANNING_CONTEXT_PROMPT.format(task=task))
+        self._bar.set_loading(False)
+
+        parsed = self._parse_json(raw)
+        if not parsed or not parsed.get("needs_file_context", False):
+            logger.info("Planner: no file context needed before planning")
+            return ""
+
+        requested = parsed.get("files") or []
+        if not requested:
+            return ""
+
+        max_files = self._config.agent.planning_context_max_files
+        line_pool = self._config.agent.planning_context_max_lines
+        cwd = Path(os.getcwd()).resolve()
+
+        # ------------------------------------------------------------------
+        # Phase 1 — read all requested files (up to max_files)
+        # Each entry: (display_path, resolved_path | None, lines | None)
+        # None resolved_path  → path was unsafe
+        # None lines          → file not found / unreadable
+        # ------------------------------------------------------------------
+        loaded: list[tuple[str, Path | None, list[str] | None]] = []
+
+        for raw_path in requested[:max_files]:
+            try:
+                resolved = (cwd / raw_path).resolve()
+                resolved.relative_to(cwd)
+            except (ValueError, Exception):
+                logger.warning("Planner: skipping unsafe path '%s'", raw_path)
+                loaded.append((raw_path, None, None))
+                continue
+
+            if not resolved.is_file():
+                logger.info("Planner: context file not found: %s", raw_path)
+                loaded.append((raw_path, resolved, None))
+                continue
+
+            try:
+                lines = resolved.read_text(errors="replace").splitlines(keepends=True)
+                loaded.append((raw_path, resolved, lines))
+                logger.info("Planner: read '%s' (%d lines)", raw_path, len(lines))
+            except OSError as exc:
+                logger.warning("Planner: could not read '%s': %s", raw_path, exc)
+                loaded.append((raw_path, resolved, None))
+
+        # Files that were actually read successfully
+        readable = [(p, r, ls) for p, r, ls in loaded if ls is not None]
+        total_lines = sum(len(ls) for _, _, ls in readable)
+
+        # ------------------------------------------------------------------
+        # Phase 2 — check pool, warn user if truncation is needed
+        # ------------------------------------------------------------------
+        allocations: dict[str, int] = {}   # path → lines to include
+        truncated_paths: set[str] = set()
+
+        if total_lines > line_pool:
+            # Build a summary table for the warning
+            table_rows = "\n".join(
+                f"  • {p}: {len(ls):,} lines"
+                for p, _, ls in readable
+            )
+            self._bar.set_loading(False)
+            safe_console_print(self._console, self._bar)
+            safe_console_print(self._console, self._bar, Panel(
+                f"[yellow]Total context ({total_lines:,} lines) exceeds the configured pool "
+                f"({line_pool:,} lines, set via AGENT_PLANNING_CONTEXT_MAX_LINES).[/yellow]\n\n"
+                f"Files requested:\n{table_rows}\n\n"
+                "Content will be [bold]proportionally truncated[/bold] across all files if you proceed.\n"
+                "To avoid truncation, increase [bold]AGENT_PLANNING_CONTEXT_MAX_LINES[/bold] in your .env.",
+                title="[yellow]Pre-Planning Context Too Large[/yellow]",
+                border_style="yellow",
+            ))
+
+            try:
+                choice = agent_prompt(
+                    "Proceed with truncated context?",
+                    choices=["y", "n"],
+                    default="y",
+                    console=self._console,
+                    status_bar=self._bar,
+                    modal_title="Context Truncation Required",
+                    modal_body=(
+                        "[bold]The gathered file context exceeds the line pool.[/bold]\n\n"
+                        "y) Proceed — truncate proportionally and continue planning\n"
+                        "n) Abort — skip file context and plan without it"
+                    ),
+                    modal_style="yellow",
+                )
+            except AgentCancelled:
+                choice = "n"
+
+            if choice == "n":
+                safe_console_print(
+                    self._console, self._bar,
+                    "[yellow]Context gathering aborted — planning without file context.[/yellow]",
+                )
+                return ""
+
+            # Distribute the pool proportionally (each file gets at least 1 line)
+            for p, _, ls in readable:
+                share = max(1, int(len(ls) / total_lines * line_pool))
+                allocations[p] = share
+                if share < len(ls):
+                    truncated_paths.add(p)
+        else:
+            # Fits entirely — include every line of every readable file
+            for p, _, ls in readable:
+                allocations[p] = len(ls)
+
+        # ------------------------------------------------------------------
+        # Phase 3 — build the context block
+        # ------------------------------------------------------------------
+        parts: list[str] = []
+
+        for display_path, resolved, lines in loaded:
+            if lines is None:
+                label = "_(unsafe path — skipped)_" if resolved is None else "_(file not found — skipped)_"
+                parts.append(f"### `{display_path}`\n{label}")
+                continue
+
+            keep = allocations[display_path]
+            chunk = lines[:keep]
+            content = "".join(chunk)
+            ext = resolved.suffix.lstrip(".") or "text"
+
+            if display_path in truncated_paths:
+                cut = len(lines) - keep
+                note = f"\n[... {cut:,} lines truncated — increase AGENT_PLANNING_CONTEXT_MAX_LINES to include full file]"
+            else:
+                note = ""
+
+            parts.append(f"### `{display_path}`\n```{ext}\n{content}{note}\n```")
+
+        if not parts:
+            return ""
+
+        reason = parsed.get("reason", "")
+        header = (
+            f"\n# Pre-Planning File Context\n\n_{reason}_\n\n"
+            if reason
+            else "\n# Pre-Planning File Context\n\n"
+        )
+        return header + "\n\n".join(parts) + "\n"
+
+    @staticmethod
+    def _build_generation_prompt(task: str, context_section: str) -> str:
+        """Build the plan-generation prompt, injecting file context before the
+        instructions block so the planner reasons over real code."""
+        base = PLANNING_GENERATION_PROMPT.format(task=task)
+        if not context_section:
+            return base
+        # Inject the context block between the Task section and the Instructions
+        # section so it reads naturally and is close to the task description.
+        return base.replace("\n# Instructions", context_section + "\n# Instructions", 1)
 
     def _call_llm(self, model: str, prompt: str) -> str:
         """Call the LLM with a single user message and return the response text."""
