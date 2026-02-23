@@ -39,11 +39,13 @@ class ContextOptimizer:
         self,
         config: Config,
         status_bar: StatusBar,
+        provider=None,
         token_threshold: int | None = None,
         large_message_ratio: float | None = None,
     ) -> None:
         self._config = config
         self._status_bar = status_bar
+        self._provider = provider
         self._token_threshold = (
             token_threshold
             if token_threshold is not None
@@ -182,7 +184,7 @@ class ContextOptimizer:
     def _summarize_text(self, text: str) -> str:
         """Call the LLM to produce a concise summary."""
         try:
-            provider = get_provider(self._config.llm_provider.provider)
+            provider = self._provider or get_provider(self._config.llm_provider.provider)
             model = getattr(self._config.llm_provider, f"{provider.get_name()}_model", None)
             response = provider.create_chat_completion(
                 messages=[{"role": "user", "content": _SUMMARIZATION_PROMPT + text}],

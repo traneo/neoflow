@@ -91,8 +91,11 @@ def run_agent(task: str, config: Config, console: Console, bar: StatusBar | None
     
     bar.set_message("Agent started")
 
-    optimizer = ContextOptimizer(config, bar)
-    
+    provider = get_provider(config.llm_provider.provider)
+    config.llm_provider_instance = provider
+
+    optimizer = ContextOptimizer(config, bar, provider=provider)
+
     # Initialize loop detector to prevent infinite loops
     loop_detector = LoopDetector(
         max_iterations=config.agent.max_iterations,
@@ -201,7 +204,7 @@ def run_agent(task: str, config: Config, console: Console, bar: StatusBar | None
                     )
                     bar._state.message_count = len(messages)
 
-                task_optimizer = ContextOptimizer(config, bar)
+                task_optimizer = ContextOptimizer(config, bar, provider=provider)
                 # Create new loop detector for each task
                 task_loop_detector = LoopDetector(
                     max_iterations=config.agent.max_iterations,
@@ -221,6 +224,7 @@ def run_agent(task: str, config: Config, console: Console, bar: StatusBar | None
                             task_loop_detector,
                             query_confirmation_state,
                             pre_completed=pre_completed,
+                            provider=provider,
                         )
                 except _AgentDone as done:
                     if done.result:
@@ -280,6 +284,7 @@ def run_agent(task: str, config: Config, console: Console, bar: StatusBar | None
                     optimizer,
                     loop_detector,
                     query_confirmation_state,
+                    provider=provider,
                 )
     except AgentCancelled:
         _safe_console_print(console, bar, "\n[bold]Agent cancelled.[/bold]")
@@ -288,6 +293,7 @@ def run_agent(task: str, config: Config, console: Console, bar: StatusBar | None
     finally:
         if should_stop_bar:
             bar.stop()
+        provider.close()
 
 
 def _agent_step(
@@ -299,6 +305,7 @@ def _agent_step(
     loop_detector: LoopDetector | None,
     query_confirmation_state: dict[str, bool],
     pre_completed: dict[str, str] | None = None,
+    provider=None,
 ) -> str | None:
     """Execute one iteration of the agent loop.
 
@@ -312,7 +319,8 @@ def _agent_step(
     status_bar.set_loading(True, "Agent is thinking...")
     # Strip internal metadata before sending to the LLM
     clean_messages = optimizer.strip_metadata(messages)
-    provider = get_provider(config.llm_provider.provider)
+    if provider is None:
+        provider = get_provider(config.llm_provider.provider)
     model = getattr(config.llm_provider, f"{provider.get_name()}_model", None)
 
     # Use retry logic with error handling

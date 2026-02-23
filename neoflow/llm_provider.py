@@ -43,6 +43,10 @@ class LLMProvider(ABC):
         """Get provider name."""
         pass
 
+    def close(self) -> None:
+        """Release any resources held by this provider (e.g. HTTP connections)."""
+        pass
+
 
 class OllamaProvider(LLMProvider):
     """Ollama local LLM provider."""
@@ -190,15 +194,16 @@ class VLLMProvider(LLMProvider):
             if model is None:
                 model = os.environ.get("VLLM_MODEL", "meta-llama/Llama-2-7b")
 
-            response = requests.post(
-                f"{self.api_url}/v1/chat/completions",
-                json={
-                    "model": model,
-                    "messages": messages,
-                    **kwargs,
-                },
-                timeout=300,
-            )
+            with requests.Session() as session:
+                response = session.post(
+                    f"{self.api_url}/v1/chat/completions",
+                    json={
+                        "model": model,
+                        "messages": messages,
+                        **kwargs,
+                    },
+                    timeout=300,
+                )
             response.raise_for_status()
             return response.json()
         except requests.exceptions.Timeout as e:
@@ -228,6 +233,13 @@ class OpenAIProvider(LLMProvider):
 
         if not self.api_key:
             logger.warning("OPENAI_API_KEY not set; OpenAI provider will fail")
+            self._client = None
+        else:
+            import openai
+            if self.api_base:
+                self._client = openai.OpenAI(api_key=self.api_key, base_url=self.api_base)
+            else:
+                self._client = openai.OpenAI(api_key=self.api_key)
 
     def get_name(self) -> str:
         return "openai"
@@ -236,6 +248,12 @@ class OpenAIProvider(LLMProvider):
         """Check if OpenAI API key is configured."""
         return bool(self.api_key)
 
+    def close(self) -> None:
+        """Close the underlying HTTP client and release connections."""
+        if self._client is not None:
+            self._client.close()
+            self._client = None
+
     def create_chat_completion(
         self, messages: list[dict], model: Optional[str] = None, **kwargs
     ) -> dict[str, Any]:
@@ -243,14 +261,10 @@ class OpenAIProvider(LLMProvider):
         try:
             import openai
 
-            if not self.api_key:
+            if not self.api_key or self._client is None:
                 raise ValueError("OPENAI_API_KEY not configured")
 
-            # Configure client
-            if self.api_base:
-                client = openai.OpenAI(api_key=self.api_key, base_url=self.api_base)
-            else:
-                client = openai.OpenAI(api_key=self.api_key)
+            client = self._client
 
             if model is None:
                 model = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")

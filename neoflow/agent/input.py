@@ -264,6 +264,7 @@ def run_llm_with_cancel(llm_fn, status_bar=None):
             except TimeoutError:
                 continue
     except KeyboardInterrupt:
+        llm_fn = None  # release closure reference to clean_messages
         if status_bar is None:
             sys.stdout.write(f"\r{' ' * (len(_LABEL) + 4)}\r")
             sys.stdout.flush()
