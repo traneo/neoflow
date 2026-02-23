@@ -1,11 +1,6 @@
 import logging
 import os
-import re
-import shlex
-import subprocess
 from pathlib import Path
-
-from anyio import sleep
 
 from neoflow.llm_provider import get_provider
 from neoflow.llm_error_handler import retry_llm_request
@@ -19,17 +14,15 @@ from neoflow.agent.input import AgentCancelled, agent_prompt, run_llm_with_cance
 from neoflow.agent.loop_detector import LoopDetector
 from neoflow.agent.planner import Planner
 from neoflow.agent.task_executor import TaskExecutor
+from neoflow.agent.tool_registry import ToolRegistry
 from neoflow.config import Config
 from neoflow.init import NEOFLOW_DIR
-from neoflow.prompts import AGENT_SYSTEM_PROMPT
+from neoflow.prompts import build_agent_system_prompt
 from neoflow.search.tools import (
     parse_action,
     strip_json_blocks,
-    search_code,
-    search_documentation,
-    search_tickets,
 )
-from neoflow.status_bar import StatusBar, estimate_tokens, status_context, safe_console_print as _shared_safe_console_print
+from neoflow.status_bar import StatusBar, estimate_tokens, safe_console_print as _shared_safe_console_print
 
 logger = logging.getLogger(__name__)
 
@@ -38,25 +31,6 @@ def _safe_console_print(console: Console, status_bar: StatusBar | None, *args, *
     """Print via Rich while temporarily suspending status bar redraws."""
     _shared_safe_console_print(console, status_bar, *args, **kwargs)
 
-# Tools allowed in agent mode
-_AGENT_TOOLS = {
-    "run_command",
-    "write_file",
-    "read_file",
-    "edit_file",
-    "delete_file",
-    "search_code",
-    "search_documentation",
-    "search_tickets",
-    "ask_chat",
-    "ask_user",
-    "notebook_search",
-    "notebook_add",
-    "notebook_remove",
-    "mark_task_done",
-    "done",
-}
-
 
 # Session-level approval toggle for run_command confirmations.
 # When True, run_command actions execute without confirmation for the
@@ -64,12 +38,39 @@ _AGENT_TOOLS = {
 _RUN_COMMANDS_AUTO_APPROVED_SESSION = False
 
 
+def _load_installed_tool_packs(registry: ToolRegistry, config: Config) -> None:
+    """Load all installed tool packs into *registry*."""
+    try:
+        from neoflow.tool_pack import load_tool_registry, get_neoflow_tools_dir
+
+        tool_reg = load_tool_registry()
+        for entry in tool_reg.get("tool-packs", []):
+            tag = entry.get("tag", "")
+            if not tag:
+                continue
+            install_dir = get_neoflow_tools_dir() / tag
+            if not install_dir.is_dir():
+                logger.warning("Tool pack directory not found, skipping: %s", install_dir)
+                continue
+            loaded = registry.load_tool_pack(install_dir, unsafe_mode=config.agent.unsafe_mode)
+            if loaded:
+                logger.info(
+                    "Loaded %d tool(s) from pack '%s': %s", len(loaded), tag, loaded
+                )
+    except Exception as exc:
+        logger.warning("Could not load tool packs: %s", exc)
+
+
 def run_agent(task: str, config: Config, console: Console, bar: StatusBar | None = None):
     """Run the agentic loop for a given task description."""
+    # Build tool registry (built-ins + installed packs)
+    registry = ToolRegistry()
+    _load_installed_tool_packs(registry, config)
+
     # Parse @domain mentions and build the system prompt
     domain_names, cleaned_task = parse_domain_mentions(task)
     domain_content = load_domains(domain_names)
-    system_prompt = AGENT_SYSTEM_PROMPT
+    system_prompt = build_agent_system_prompt(registry)
     if domain_content:
         system_prompt = system_prompt + "\n" + domain_content + "\n"
 
@@ -225,6 +226,7 @@ def run_agent(task: str, config: Config, console: Console, bar: StatusBar | None
                             query_confirmation_state,
                             pre_completed=pre_completed,
                             provider=provider,
+                            registry=registry,
                         )
                 except _AgentDone as done:
                     if done.result:
@@ -285,6 +287,7 @@ def run_agent(task: str, config: Config, console: Console, bar: StatusBar | None
                     loop_detector,
                     query_confirmation_state,
                     provider=provider,
+                    registry=registry,
                 )
     except AgentCancelled:
         _safe_console_print(console, bar, "\n[bold]Agent cancelled.[/bold]")
@@ -306,6 +309,7 @@ def _agent_step(
     query_confirmation_state: dict[str, bool],
     pre_completed: dict[str, str] | None = None,
     provider=None,
+    registry: ToolRegistry | None = None,
 ) -> str | None:
     """Execute one iteration of the agent loop.
 
@@ -391,6 +395,10 @@ def _agent_step(
     act_name = action.get("action", "unknown")
     status_bar.set_last_action(act_name)
 
+    # Ensure we have a registry (fallback to default built-ins)
+    if registry is None:
+        registry = ToolRegistry()
+
     # Handle "done" action
     if act_name == "done":
         summary = action.get("summary", "Task completed.")
@@ -402,9 +410,10 @@ def _agent_step(
         ))
         raise _AgentDone(summary)  # Pass summary for task resolution tracking
 
-    # Validate tool is allowed
-    if act_name not in _AGENT_TOOLS:
-        available = ", ".join(sorted(_AGENT_TOOLS - {"done"}))
+    # Validate tool is registered
+    tool_def = registry.get(act_name)
+    if tool_def is None:
+        available = ", ".join(sorted(registry.all_names()))
         reject_msg = (
             f"Action '{act_name}' is not available. "
             f"Available actions: {available}, done. "
@@ -416,18 +425,11 @@ def _agent_step(
         return
 
     # Display the proposed action (compact single line)
-    action_display = _format_action(action)
+    action_display = _format_action(action, registry)
     _safe_console_print(console, status_bar, action_display)
-    
-    # Add action to status bar
-    primary_key = _ACTION_PRIMARY_PARAM.get(act_name)
-    action_summary = f"{act_name}"
-    if primary_key and primary_key in action:
-        param_val = str(action[primary_key])[:60]
-        action_summary = f"{act_name}: {param_val}"
 
-    # Ask for confirmation only for run_command (unless unsafe_mode is enabled).
-    if act_name == "run_command":
+    # Security gate — handle approval and unsafe tool confirmation
+    if tool_def.security_level == "approval":
         global _RUN_COMMANDS_AUTO_APPROVED_SESSION
         needs_confirmation = (
             not config.agent.unsafe_mode
@@ -437,17 +439,17 @@ def _agent_step(
 
         if needs_confirmation:
             user_choice = agent_prompt(
-                "Allow this command?",
+                "Allow this action?",
                 choices=["y", "n", "a", "/exit"],
                 default="y",
                 console=console,
                 status_bar=status_bar,
-                modal_title="Command Approval Required",
+                modal_title="Action Approval Required",
                 modal_body=(
-                    "[bold]Allow this command?[/bold]\n\n"
+                    f"[bold]Allow {tool_def.label}?[/bold]\n\n"
                     "y) Yes, run once\n"
-                    "n) No, reject this command\n"
-                    "a) Always allow run_command for this session\n"
+                    "n) No, reject this action\n"
+                    "a) Always allow approval-level actions for this session\n"
                     "/exit) Exit agent mode"
                 ),
                 modal_style="yellow",
@@ -459,7 +461,7 @@ def _agent_step(
 
             if user_choice == "n":
                 feedback = agent_prompt("Optional feedback (or Enter to skip)")
-                msg = "The user declined this run_command action."
+                msg = f"The user declined the {act_name} action."
                 if feedback:
                     msg += f" Feedback: {feedback}"
                 msg += " Please propose a different approach or action."
@@ -471,13 +473,58 @@ def _agent_step(
             if user_choice == "a":
                 _RUN_COMMANDS_AUTO_APPROVED_SESSION = True
                 query_confirmation_state["run_command_approved"] = True
-                _safe_console_print(console, status_bar, "[green]Auto-approval enabled for run_command in this session.[/green]")
+                _safe_console_print(
+                    console, status_bar,
+                    "[green]Auto-approval enabled for this session.[/green]",
+                )
             else:
                 query_confirmation_state["run_command_approved"] = True
 
-    # Execute the action
+    elif tool_def.security_level == "unsafe":
+        # Unsafe tools always require explicit per-action approval
+        user_choice = agent_prompt(
+            "Allow this UNSAFE action?",
+            choices=["y", "n", "/exit"],
+            default="n",
+            console=console,
+            status_bar=status_bar,
+            modal_title="UNSAFE Action Approval Required",
+            modal_body=(
+                f"[bold red]This is an UNSAFE action: {tool_def.label}[/bold red]\n\n"
+                "y) Yes, run this unsafe action\n"
+                "n) No, reject this action\n"
+                "/exit) Exit agent mode"
+            ),
+            modal_style="red",
+        )
+
+        if user_choice == "/exit":
+            _safe_console_print(console, status_bar, "[bold]Exiting agent mode.[/bold]")
+            raise _AgentDone()
+
+        if user_choice == "n":
+            feedback = agent_prompt("Optional feedback (or Enter to skip)")
+            msg = f"The user declined the unsafe {act_name} action."
+            if feedback:
+                msg += f" Feedback: {feedback}"
+            msg += " Please propose a different approach."
+            optimizer.add_message(messages, {"role": "user", "content": msg})
+            optimizer.optimize(messages)
+            status_bar.increment_messages()
+            return
+
+    # Execute the action via registry
     status_bar.set_loading(True, f"Executing {act_name}...")
-    result = _execute_action(action, config, console, status_bar, pre_completed=pre_completed)
+    try:
+        result = tool_def.execute(
+            action,
+            config,
+            console=console,
+            status_bar=status_bar,
+            pre_completed=pre_completed,
+        )
+    except Exception as exc:
+        result = f"Error: {exc}"
     status_bar.set_loading(False)
 
     # Add result to status bar
@@ -527,68 +574,21 @@ def _agent_step(
     status_bar.increment_messages()
 
 
-_ACTION_ICONS = {
-    "run_command": "💻",
-    "write_file": "✍️",
-    "read_file": "📖",
-    "edit_file": "🖊️",
-    "delete_file": "🗑️",
-    "search_code": "🔎",
-    "search_documentation": "📚",
-    "search_tickets": "🎫",
-    "ask_chat": "💬",
-    "ask_user": "🙋",
-    "notebook_search": "🔖",
-    "notebook_add": "📝",
-    "notebook_remove": "🗑️",
-    "mark_task_done": "☑️",
-    "done": "✅",
-}
-
-_ACTION_LABELS = {
-    "run_command": "Run Command",
-    "write_file": "Write File",
-    "read_file": "Read File",
-    "edit_file": "Edit File",
-    "delete_file": "Delete File",
-    "search_code": "Search Code",
-    "search_documentation": "Search Documentation",
-    "search_tickets": "Search Tickets",
-    "ask_chat": "Ask Chat",
-    "ask_user": "Ask User",
-    "notebook_search": "Notebook Search",
-    "notebook_add": "Notebook Add",
-    "notebook_remove": "Notebook Remove",
-    "mark_task_done": "Mark Task Done",
-    "done": "Done",
-}
-
-# Maps each action to the key of its primary parameter for compact display
-_ACTION_PRIMARY_PARAM = {
-    "run_command": "command",
-    "write_file": "path",
-    "read_file": "path",
-    "edit_file": "path",
-    "delete_file": "path",
-    "search_code": "query",
-    "search_documentation": "query",
-    "search_tickets": "query",
-    "ask_chat": "query",
-    "notebook_search": "query",
-    "notebook_add": "title",
-    "notebook_remove": "title",
-    "mark_task_done": "task_id",
-    "done": "summary",
-}
-
-
-def _format_action(action: dict) -> str:
+def _format_action(action: dict, registry: ToolRegistry | None = None) -> str:
     """Format an action as a compact single-line string with icon + name + primary param."""
     act = action.get("action", "unknown")
-    icon = _ACTION_ICONS.get(act, "\u2699\ufe0f")
-    label = _ACTION_LABELS.get(act, act)
 
-    primary_key = _ACTION_PRIMARY_PARAM.get(act)
+    tool_def = registry.get(act) if registry else None
+    icon = tool_def.icon if tool_def else "⚙️"
+    label = tool_def.label if tool_def else act
+    primary_key = tool_def.primary_param if tool_def else None
+
+    # Special-case the "done" action which isn't a ToolDefinition
+    if act == "done":
+        icon = "✅"
+        label = "Done"
+        primary_key = "summary"
+
     primary_val = ""
     if primary_key and primary_key in action:
         primary_val = str(action[primary_key])
@@ -703,256 +703,6 @@ class _AgentDone(Exception):
 
 
 
-def _execute_action(
-    action: dict,
-    config: Config,
-    console: Console | None = None,
-    status_bar: StatusBar | None = None,
-    pre_completed: dict[str, str] | None = None,
-) -> str:
-    """Execute a parsed action and return the result as a string."""
-    act = action.get("action")
-    try:
-        if act == "mark_task_done":
-            task_id = action.get("task_id", "").strip()
-            summary = action.get("summary", "Completed as part of this task.")
-            if not task_id:
-                return "Error: mark_task_done requires a 'task_id' field."
-            if pre_completed is None:
-                return "Error: mark_task_done is only available in multi-task workflows."
-            pre_completed[task_id] = summary
-            logger.info("Task '%s' marked done ahead of schedule.", task_id)
-            return f"Task '{task_id}' recorded as already done. It will be skipped when reached."
-        elif act == "run_command":
-            return _run_command(action["command"], unsafe_mode=config.agent.unsafe_mode)
-        elif act == "write_file":
-            return _write_file(action["path"], action["content"])
-        elif act == "read_file":
-            return _read_file(
-                action["path"],
-                offset=action.get("offset", 0),
-                limit=action.get("limit", 200),
-            )
-        elif act == "edit_file":
-            return _edit_file(action["path"], action["old_string"], action["new_string"])
-        elif act == "delete_file":
-            return _delete_file(action["path"])
-        elif act == "search_code":
-            return search_code(
-                action["query"],
-                config,
-                limit=action.get("limit", 5),
-                repository=action.get("repository"),
-                language=action.get("language"),
-                is_test=action.get("is_test"),
-                directory=action.get("directory"),
-            )
-        elif act == "search_documentation":
-            return search_documentation(
-                action["query"],
-                config,
-                limit=action.get("limit", 5),
-            )
-        elif act == "search_tickets":
-            return search_tickets(
-                action["query"],
-                config,
-                limit=action.get("limit", 10),
-            )
-        elif act == "ask_chat":
-            from neoflow.chat import run_chat
-            answer = run_chat(action["query"], config, console, status_bar, silent=True)
-            return answer or "Chat could not produce an answer."
-        elif act == "ask_user":
-            return _ask_user(
-                question=action["question"],
-                options=action.get("options"),
-                allow_freeform=action.get("allow_freeform", True),
-                console=console,
-                status_bar=status_bar,
-            )
-        elif act == "notebook_search":
-            return _notebook_search(action["query"])
-        elif act == "notebook_add":
-            return _notebook_add(action["title"], action["content"])
-        elif act == "notebook_remove":
-            return _notebook_remove(action["title"])
-        else:
-            return f"Unknown action: {act}"
-    except Exception as exc:
-        return f"Error: {exc}"
-
-
-
-def _run_command(command: str, unsafe_mode: bool = False) -> str:
-    if unsafe_mode:
-        # Unsafe mode: allow shell=True for more flexible command execution
-        # Console.warn("[yellow]Running command in unsafe mode (shell=True)[/yellow]")
-        result = subprocess.run(
-            command,
-            shell=True,
-            capture_output=True,
-            text=True,
-            timeout=30,
-            cwd=os.getcwd(),
-        )
-    else:
-        # Safe mode: parse command and execute without shell
-        args = shlex.split(command)
-        result = subprocess.run(
-            args,
-            shell=False,
-            capture_output=True,
-            text=True,
-            timeout=30,
-            cwd=os.getcwd(),
-        )
-    stdout = result.stdout or ""
-    stderr = result.stderr or ""
-
-    if result.returncode != 0:
-        parts = [f"COMMAND FAILED (exit code: {result.returncode})"]
-        if stdout:
-            parts.append(f"STDOUT:\n{stdout.rstrip()}")
-        if stderr:
-            parts.append(f"STDERR:\n{stderr.rstrip()}")
-        return "\n".join(parts)
-
-    output = stdout
-    if stderr:
-        output += ("\n" if output else "") + f"STDERR:\n{stderr}"
-    return output or "(no output)"
-
-
-def _safe_path(path: str) -> tuple[Path, str | None]:
-    """Resolve path and verify it is inside the working directory.
-
-    Returns (resolved_path, None) on success or (None, error_message) on failure.
-    """
-    cwd = Path(os.getcwd()).resolve()
-    resolved = (cwd / path).resolve()
-    try:
-        resolved.relative_to(cwd)
-    except ValueError:
-        return resolved, f"Error: path '{path}' is outside the working directory."
-    return resolved, None
-
-
-def _write_file(path: str, content: str) -> str:
-    """Write (or overwrite) a file with the given content."""
-    resolved, err = _safe_path(path)
-    if err:
-        return err
-    resolved.parent.mkdir(parents=True, exist_ok=True)
-    resolved.write_text(content)
-    lines = content.count("\n") + (1 if content and not content.endswith("\n") else 0)
-    return f"File written: {path} ({resolved.stat().st_size} bytes, {lines} lines)"
-
-
-def _read_file(path: str, offset: int = 0, limit: int = 200) -> str:
-    """Read a file and return numbered lines."""
-    resolved, err = _safe_path(path)
-    if err:
-        return err
-    if not resolved.is_file():
-        return f"Error: file not found: {path}"
-    lines = resolved.read_text(errors="replace").splitlines(keepends=True)
-    total = len(lines)
-    chunk = lines[offset : offset + limit]
-    numbered = "".join(f"{offset + i + 1:4}: {line}" for i, line in enumerate(chunk))
-    remaining = total - offset - len(chunk)
-    suffix = f"\n[{remaining} more lines — use offset={offset + limit} to continue]" if remaining > 0 else ""
-    return f"File: {path} ({total} lines)\n{numbered}{suffix}"
-
-
-def _edit_file(path: str, old_string: str, new_string: str) -> str:
-    """Replace the first occurrence of old_string with new_string in a file.
-
-    Returns an error if old_string is not found or appears more than once
-    (caller should add more surrounding context to make it unique).
-    """
-    resolved, err = _safe_path(path)
-    if err:
-        return err
-    if not resolved.is_file():
-        return f"Error: file not found: {path}"
-    content = resolved.read_text(errors="replace")
-    count = content.count(old_string)
-    if count == 0:
-        return (
-            f"Error: old_string not found in {path}. "
-            "Verify exact whitespace and indentation — use read_file to inspect the file first."
-        )
-    if count > 1:
-        return (
-            f"Error: old_string found {count} times in {path}. "
-            "Add more surrounding context to make it unique."
-        )
-    resolved.write_text(content.replace(old_string, new_string, 1))
-    return f"File edited: {path}"
-
-
-def _delete_file(path: str) -> str:
-    """Delete a file."""
-    resolved, err = _safe_path(path)
-    if err:
-        return err
-    if not resolved.exists():
-        return f"Error: file not found: {path}"
-    if not resolved.is_file():
-        return f"Error: '{path}' is a directory, not a file."
-    resolved.unlink()
-    return f"File deleted: {path}"
-
-
-def _ask_user(
-    question: str,
-    options: list[str] | None = None,
-    allow_freeform: bool = True,
-    console: Console | None = None,
-    status_bar: StatusBar | None = None,
-) -> str:
-    """Prompt the user for clarification/help and return the captured response."""
-    normalized_options = [str(opt) for opt in (options or []) if str(opt).strip()]
-
-    if console is not None:
-        body = f"[bold]{question}[/bold]"
-        if normalized_options:
-            option_lines = [f"[{idx}] {opt}" for idx, opt in enumerate(normalized_options, 1)]
-            body += "\n\n" + "\n".join(option_lines)
-            if allow_freeform:
-                body += "\n[f] Enter a custom response"
-        _safe_console_print(console, status_bar)
-        _safe_console_print(console, status_bar, Panel(body, title="Agent Needs User Input", border_style="cyan"))
-
-    if normalized_options:
-        choices = [str(idx) for idx in range(1, len(normalized_options) + 1)]
-        default_choice = choices[0] if choices else ""
-        if allow_freeform:
-            choices.append("f")
-
-        selection = agent_prompt(
-            "Choose an option",
-            choices=choices,
-            default=default_choice,
-        )
-
-        if selection == "f":
-            response = agent_prompt("Your response")
-            response_type = "freeform"
-        else:
-            response = normalized_options[int(selection) - 1]
-            response_type = f"option_{selection}"
-    else:
-        response = agent_prompt("Your response")
-        response_type = "freeform"
-
-    return (
-        "User response received.\n"
-        f"Question: {question}\n"
-        f"Response type: {response_type}\n"
-        f"Response: {response}"
-    )
 
 
 
@@ -1013,85 +763,3 @@ def _read_neoflow_file(filepath: str) -> str:
     return "\n".join(lines).strip()
 
 
-# ---------------------------------------------------------------------------
-# Notebook tools
-# ---------------------------------------------------------------------------
-
-def _get_notebook_path() -> str:
-    """Return the absolute path to the agent notebook file."""
-    return os.path.join(os.getcwd(), NEOFLOW_DIR, "agent_notebook.md")
-
-
-def _notebook_search(query: str) -> str:
-    """Search the agent notebook for entries matching a keyword or regex."""
-    notebook_path = _get_notebook_path()
-    if not os.path.isfile(notebook_path):
-        return "No agent notebook found. Run /init to create one."
-
-    with open(notebook_path) as f:
-        content = f.read()
-
-    # Split into entries by ## headings
-    entries = re.split(r"(?=^## )", content, flags=re.MULTILINE)
-
-    matches = []
-    for entry in entries:
-        entry = entry.strip()
-        if not entry or not entry.startswith("## "):
-            continue
-        try:
-            if re.search(query, entry, re.IGNORECASE):
-                matches.append(entry)
-        except re.error:
-            # Fall back to plain substring match
-            if query.lower() in entry.lower():
-                matches.append(entry)
-
-    if not matches:
-        return f"No notebook entries matching '{query}'."
-    return "\n\n".join(matches)
-
-
-def _notebook_add(title: str, content: str) -> str:
-    """Append a new entry to the agent notebook."""
-    notebook_path = _get_notebook_path()
-    if not os.path.isfile(notebook_path):
-        return "No agent notebook found. Run /init to create one."
-
-    entry = f"\n\n## {title}\n\n{content}\n"
-    with open(notebook_path, "a") as f:
-        f.write(entry)
-
-    return f"Added notebook entry: {title}"
-
-
-def _notebook_remove(title: str) -> str:
-    """Remove a notebook entry by its exact ## heading title."""
-    notebook_path = _get_notebook_path()
-    if not os.path.isfile(notebook_path):
-        return "No agent notebook found. Run /init to create one."
-
-    with open(notebook_path) as f:
-        content = f.read()
-
-    # Split into entries by ## headings, keeping the preamble
-    parts = re.split(r"(?=^## )", content, flags=re.MULTILINE)
-
-    found = False
-    kept = []
-    for part in parts:
-        stripped = part.strip()
-        if stripped.startswith("## "):
-            heading = stripped.splitlines()[0].removeprefix("## ").strip()
-            if heading == title:
-                found = True
-                continue
-        kept.append(part)
-
-    if not found:
-        return f"No notebook entry with title '{title}' found."
-
-    with open(notebook_path, "w") as f:
-        f.write("".join(kept))
-
-    return f"Removed notebook entry: {title}"

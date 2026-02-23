@@ -1,19 +1,15 @@
 [project]
 name = "neoflow"
-version = "0.0.29"
+version = "0.0.31"
 description = "NeoFlow is an AI-powered development assistant designed to streamline the software development process."
 requires-python = ">=3.12"
 dependencies = [
     "weaviate-client>=4.19.0",
-    "weaviate-agents>=1.2.0",
     "ollama",
-    "selenium>=4.39.0",
-    "beautifulsoup4>=4.14.0",
     "requests>=2.32.0",
     "rich>=14.0.0",
     "pydantic>=2.12.0",
     "httpx>=0.28.0",
-    "grpcio>=1.76.0",
     "pyyaml>=6.0",
     "prompt_toolkit>=3.0.0",
     "fastapi>=0.115.0",

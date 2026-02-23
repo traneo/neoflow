@@ -98,6 +98,13 @@ class MCPConfig:
 
 
 @dataclass
+class ToolConfig:
+    """Configuration for the tool pack system."""
+
+    allow_unsafe_tool_packs: bool = False  # Set True to allow installing 'unsafe'-level tools
+
+
+@dataclass
 class Config:
     weaviate: WeaviateConfig = field(default_factory=WeaviateConfig)
     importer: ImporterConfig = field(default_factory=ImporterConfig)
@@ -106,6 +113,7 @@ class Config:
     server: ServerConfig = field(default_factory=ServerConfig)
     mcp: MCPConfig = field(default_factory=MCPConfig)
     llm_provider: LLMProviderConfig = field(default_factory=LLMProviderConfig)
+    tool: ToolConfig = field(default_factory=ToolConfig)
     reports_dir: str = "reports"
 
     @classmethod
@@ -330,6 +338,9 @@ CHUNK_SIZE_BYTES=2000
         config.llm_provider.chunk_size_bytes = int(os.getenv(
             "CHUNK_SIZE_BYTES", config.llm_provider.chunk_size_bytes
         ))
+        config.tool.allow_unsafe_tool_packs = os.getenv(
+            "AGENT_ALLOW_UNSAFE_TOOL_PACKS", "false"
+        ).lower() in ("true", "1", "yes")
         return config
 
     def get_weaviate_vector_config(self):

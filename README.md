@@ -51,6 +51,27 @@ NeoFlow is an AI-powered development assistant designed to streamline the softwa
    ```bash
    docker compose up -d
    ```
+Or
+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/traneo/neoflow.git
+   cd neoflow
+   ```
+2. **Install pipx**
+   ```bash
+   sudo apt install pipx
+   ```
+
+3. **Install in edit mode**
+   ```bash
+   pipx install -e <path_to_neoflow_source_code>
+   ```
+4. **Start the vector database:**
+   ```bash
+   docker compose up -d
+   ```   
+
 
 ### Run NeoFlow in a container (default MCP mode)
 

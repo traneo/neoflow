@@ -67,7 +67,13 @@ def run_chat(
         bar.add_tokens(estimate_tokens(system_prompt))
     bar.add_tokens(estimate_tokens(query))
 
-    optimizer = ContextOptimizer(config, bar)
+    # Reuse the agent's provider if available (e.g. when called via ask_chat),
+    # otherwise create one for this chat session and close it when done.
+    _shared_provider = getattr(config, "llm_provider_instance", None)
+    provider = _shared_provider or get_provider(config.llm_provider.provider)
+    _owns_provider = _shared_provider is None
+
+    optimizer = ContextOptimizer(config, bar, provider=provider)
     sources_used: list[str] = []
 
     try:
@@ -77,7 +83,6 @@ def run_chat(
 
             # Send to LLM
             clean_messages = optimizer.strip_metadata(messages)
-            provider = get_provider(config.llm_provider.provider)
             model = getattr(config.llm_provider, f"{provider.get_name()}_model", None)
             
             # Use retry logic with error handling
@@ -223,9 +228,8 @@ def run_chat(
         bar.increment_messages()
 
         clean_messages = optimizer.strip_metadata(messages)
-        provider = get_provider(config.llm_provider.provider)
         model = getattr(config.llm_provider, f"{provider.get_name()}_model", None)
-        
+
         # Use retry logic with error handling
         response = retry_llm_request(
             lambda: run_llm_with_cancel(
@@ -263,6 +267,9 @@ def run_chat(
         if not silent:
             safe_console_print(console, bar, "\n[bold]Chat cancelled.[/bold]")
         return None
+    finally:
+        if _owns_provider:
+            provider.close()
 
 
 def _execute_chat_action(action: dict, config: Config) -> str:

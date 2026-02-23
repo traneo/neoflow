@@ -9,6 +9,7 @@ from rich.console import Console
 NEOFLOW_DIR = ".neoflow"
 AGENT_SYSTEM_PROMPT_DIR = "agent_system_prompt"
 TEMPLATES_DIR = "templates"
+TOOL_PACK_DIR = "tools"
 
 _TEMPLATES: dict[str, str] = {
     "agent_system_prompt.md": (
@@ -96,6 +97,11 @@ def get_neoflow_agent_system_prompt_dir() -> Path:
 def get_neoflow_templates_dir() -> Path:
     """Return the user-level directory containing query templates."""
     return get_neoflow_home_path() / TEMPLATES_DIR
+
+
+def get_neoflow_tools_dir() -> Path:
+    """Return ``~/.neoflow/tools/`` — where installed tool packs are extracted."""
+    return get_neoflow_home_path() / TOOL_PACK_DIR
 
 
 def _copy_missing_files(source: Path, target: Path) -> None:

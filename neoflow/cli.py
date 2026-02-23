@@ -30,6 +30,14 @@ from neoflow.knowledge_pack import (
     uninstall_knowledge_pack,
     validate_manifest_from_path,
 )
+from neoflow.tool_pack import (
+    build_tool_pack,
+    install_tool_pack,
+    list_tool_packs,
+    scaffold_tool_pack,
+    uninstall_tool_pack,
+    validate_tool_manifest_from_path,
+)
 
 console = Console()
 
@@ -922,6 +930,198 @@ Contact:
             console.print(Panel(Markdown(answer), title="Answer", border_style="green"))
             console.print()
 
+def _print_tool_pack_metadata(metadata_block: dict):
+    table = Table(title="Tool Pack Metadata", show_header=True, border_style="blue")
+    table.add_column("Field", style="bold cyan")
+    table.add_column("Value")
+    for field in ("name", "tag", "version", "description", "author", "license"):
+        table.add_row(field, str(metadata_block.get(field, "")))
+    console.print(table)
+
+
+def cmd_tool_pack(args, config: Config):
+    """Build, install, uninstall, list, or validate tool packs."""
+
+    if args.tool_command == "new":
+        try:
+            pack_dir, manifest = scaffold_tool_pack(
+                tool_name=args.name,
+                output_dir=args.output,
+                force=args.force,
+            )
+        except ValueError as exc:
+            console.print(f"[red]{exc}[/red]")
+            sys.exit(1)
+        except Exception as exc:
+            console.print(f"[red]Failed to scaffold tool pack: {exc}[/red]")
+            sys.exit(1)
+
+        console.print("[green]Tool pack scaffold created[/green]")
+        console.print(f"Path: {pack_dir}")
+        console.print(f"Tag: {manifest.get('metadata', {}).get('tag', '')}")
+        console.print("Next: neoflow tool validate <path> && neoflow tool build <path>")
+        return
+
+    if args.tool_command == "build":
+        source_path = args.source
+        console.print("Checking manifest...")
+        try:
+            validation = validate_tool_manifest_from_path(
+                Path(source_path).expanduser().resolve()
+            )
+        except FileNotFoundError:
+            console.print("[red]Invalid manifest[/red]")
+            console.print("[red]- manifest.json not found[/red]")
+            sys.exit(1)
+        except Exception as exc:
+            console.print(f"[red]{exc}[/red]")
+            sys.exit(1)
+
+        if validation.errors:
+            console.print("[red]Invalid manifest[/red]")
+            for error in validation.errors:
+                console.print(f"[red]- {error}[/red]")
+            sys.exit(1)
+
+        console.print("[green]Manifest is valid![/green]")
+        console.print("Building...")
+        try:
+            package_path, _ = build_tool_pack(source_path, output_dir=args.output)
+        except Exception as exc:
+            console.print(f"[red]Build failed: {exc}[/red]")
+            sys.exit(1)
+
+        console.print("[green]Build complete[/green]")
+        console.print(f"Package: {package_path.name}")
+        console.print(str(package_path.resolve()))
+        return
+
+    if args.tool_command == "validate":
+        source_path = args.source
+        try:
+            validation = validate_tool_manifest_from_path(
+                Path(source_path).expanduser().resolve()
+            )
+        except FileNotFoundError:
+            console.print("[red]manifest.json not found[/red]")
+            sys.exit(1)
+        except Exception as exc:
+            console.print(f"[red]{exc}[/red]")
+            sys.exit(1)
+
+        if validation.errors:
+            console.print("[red]Manifest is invalid:[/red]")
+            for error in validation.errors:
+                console.print(f"[red]  - {error}[/red]")
+            sys.exit(1)
+
+        _print_tool_pack_metadata(validation.manifest.get("metadata", {}))
+        tools_list = validation.manifest.get("tools", [])
+        console.print(f"[green]Manifest is valid[/green] ({len(tools_list)} tool file(s))")
+        return
+
+    if args.tool_command == "install":
+        try:
+            import zipfile
+            import tempfile
+
+            if not os.path.isfile(args.file):
+                console.print(f"[red bold]File not found: {args.file}[/red bold]")
+                sys.exit(1)
+
+            # Preview manifest before confirming install
+            with tempfile.TemporaryDirectory() as temp_dir:
+                with zipfile.ZipFile(args.file, "r") as archive:
+                    archive.extractall(temp_dir)
+                candidates = list(Path(temp_dir).rglob("manifest.json"))
+                if len(candidates) != 1:
+                    console.print("[red]Invalid package: no manifest.json found[/red]")
+                    sys.exit(1)
+                validation = validate_tool_manifest_from_path(candidates[0].parent)
+
+            if validation.errors:
+                console.print("[red]Invalid package manifest:[/red]")
+                for error in validation.errors:
+                    console.print(f"[red]  - {error}[/red]")
+                sys.exit(1)
+
+        except Exception as exc:
+            console.print(f"[red]Cannot read package: {exc}[/red]")
+            sys.exit(1)
+
+        _print_tool_pack_metadata(validation.manifest.get("metadata", {}))
+        if not _confirm_modal("Install this tool pack?", default=False, title="Install Tool Pack"):
+            console.print("[yellow]Operation cancelled.[/yellow]")
+            return
+
+        with console.status("[bold green]Installing tool pack...[/bold green]"):
+            try:
+                entry = install_tool_pack(args.file, config)
+            except ValueError as exc:
+                msg = str(exc)
+                if "already installed" in msg:
+                    console.print(f"[yellow]{msg}[/yellow]")
+                    return
+                console.print(f"[red]Cannot install: {msg}[/red]")
+                sys.exit(1)
+            except Exception as exc:
+                console.print(f"[red]Cannot install: {exc}[/red]")
+                sys.exit(1)
+
+        console.print(f"[green]Tool pack installed: {entry['name']} ({entry['tag']})[/green]")
+        return
+
+    if args.tool_command == "uninstall":
+        packs = list_tool_packs()
+        entry = next(
+            (e for e in packs if e.get("tag") == args.tag or e.get("name") == args.tag),
+            None,
+        )
+        if not entry:
+            console.print(f"[red]Tool pack not found: {args.tag}[/red]")
+            sys.exit(1)
+
+        _print_tool_pack_metadata(entry)
+        if not _confirm_modal(
+            "Uninstall this tool pack?", default=False, title="Uninstall Tool Pack"
+        ):
+            console.print("[yellow]Operation cancelled.[/yellow]")
+            return
+
+        with console.status("[bold green]Uninstalling tool pack...[/bold green]"):
+            try:
+                uninstall_tool_pack(args.tag)
+            except Exception as exc:
+                console.print(f"[red]Cannot uninstall: {exc}[/red]")
+                sys.exit(1)
+
+        console.print(f"[green]Tool pack removed: {args.tag}[/green]")
+        return
+
+    if args.tool_command == "list":
+        packs = list_tool_packs()
+        if not packs:
+            console.print("No tool packs installed.")
+            return
+
+        table = Table(title="Installed Tool Packs", show_header=True, border_style="blue")
+        table.add_column("name", style="bold cyan")
+        table.add_column("tag")
+        table.add_column("version")
+        table.add_column("description")
+        for item in packs:
+            table.add_row(
+                str(item.get("name", "")),
+                str(item.get("tag", "")),
+                str(item.get("version", "")),
+                str(item.get("description", "")),
+            )
+        console.print(table)
+        return
+
+    console.print("[red]Please specify a subcommand. Use: neoflow tool --help[/red]")
+
+
 def main():
     parser = argparse.ArgumentParser(
         prog="neoflow",
@@ -1011,6 +1211,45 @@ def main():
         "--keep-domain",
         action="store_true",
         help="Keep copied domain files when uninstalling",
+    )
+
+    # tool pack
+    tool_parser = subparsers.add_parser(
+        "tool",
+        help="Build, install, uninstall, list, and validate tool packs (.ntp)",
+    )
+    tool_subparsers = tool_parser.add_subparsers(dest="tool_command", help="Tool pack operations")
+
+    tool_build_parser = tool_subparsers.add_parser("build", help="Build a .ntp tool pack")
+    tool_build_parser.add_argument("source", help="Path to directory containing manifest.json")
+    tool_build_parser.add_argument(
+        "-o", "--output", type=str, default=None,
+        help="Output directory for the .ntp file (default: current directory)",
+    )
+
+    tool_validate_parser = tool_subparsers.add_parser("validate", help="Validate a tool pack source directory")
+    tool_validate_parser.add_argument("source", help="Path to directory containing manifest.json")
+
+    tool_install_parser = tool_subparsers.add_parser("install", help="Install a .ntp tool pack")
+    tool_install_parser.add_argument("file", help="Path to the .ntp file to install")
+
+    tool_uninstall_parser = tool_subparsers.add_parser("uninstall", help="Uninstall a tool pack by tag")
+    tool_uninstall_parser.add_argument("tag", help="Tag or name of the tool pack to uninstall")
+
+    tool_subparsers.add_parser("list", help="List installed tool packs")
+
+    tool_new_parser = tool_subparsers.add_parser("new", help="Scaffold a new tool pack directory")
+    tool_new_parser.add_argument(
+        "-n", "--name", required=True,
+        help="Display name for the new tool pack (e.g. 'Hello World Tool')",
+    )
+    tool_new_parser.add_argument(
+        "-o", "--output", type=str, default=None,
+        help="Output parent directory (default: current directory)",
+    )
+    tool_new_parser.add_argument(
+        "-f", "--force", action="store_true",
+        help="Overwrite target directory if it already exists",
     )
 
     # config
@@ -1152,6 +1391,7 @@ def main():
         "search": cmd_search,
         "import": cmd_import,
         "knowledge-pack": cmd_knowledge_pack,
+        "tool": cmd_tool_pack,
         "config": cmd_config,
         "db": cmd_db,
         "server": cmd_server,
@@ -1168,6 +1408,10 @@ def main():
                 parser.error("knowledge-pack --install requires <file_name>")
             if args.uninstall and not args.target:
                 parser.error("knowledge-pack --uninstall requires <pack-name>")
+        if args.command == "tool" and not getattr(args, "tool_command", None):
+            parser.error(
+                "tool requires a subcommand: list, install, uninstall, build, validate"
+            )
         if (
             args.command == "db"
             and not getattr(args, "db_command", None)
