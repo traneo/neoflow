@@ -1,0 +1,13 @@
+{
+  "metadata": {
+    "name": "Simple Greeter",
+    "tag": "simple-greeter",
+    "version": "1.0.0",
+    "description": "Minimal sample tool pack with one greeting action.",
+    "author": "NeoFlow Docs",
+    "license": "MIT"
+  },
+  "tools": [
+    "tools/say_hello_tool.py"
+  ]
+}

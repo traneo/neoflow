@@ -26,6 +26,7 @@ Welcome to the NeoFlow documentation! This directory contains comprehensive guid
 - **[API Server](API_SERVER.md)** - REST API documentation and usage
 - **[LLM Providers](LLM_PROVIDERS.md)** - Multi-provider LLM support (Ollama/vLLM/OpenAI)
 - **[Configuration](CONFIGURATION.md)** - Complete configuration reference
+- **[Tool Packs](tools/README.md)** - Build, install, and manage custom agent tools
 
 ## Quick Links
 
@@ -42,6 +43,8 @@ Welcome to the NeoFlow documentation! This directory contains comprehensive guid
 | Create templates | [Template System](TEMPLATE_SYSTEM.md) |
 | Import ticket data | [Data Import](DATA_IMPORT.md) |
 | Build/install knowledge packs | [Knowledge Pack](KNOWLEDGE_PACK.md) |
+| Create custom agent tools | [Tool Packs](tools/README.md) |
+| Quick start custom tools | [Overview - Tool Packs Quick Start](OVERVIEW.md#tool-packs-quick-start) |
 | Clear database collections | [Database Management](DB_COMMANDS.md) |
 
 ### Reference
@@ -53,6 +56,7 @@ Welcome to the NeoFlow documentation! This directory contains comprehensive guid
 | API endpoints | [API Server - Endpoints](API_SERVER.md#endpoints) |
 | Search tools | [Search Features - Search Tools](SEARCH_FEATURES.md#search-tools) |
 | Agent tools | [Agent System - Available Tools](AGENT_SYSTEM.md#available-tools) |
+| Custom tools | [Tool Packs](tools/README.md) |
 
 ## Documentation Structure
 
@@ -73,7 +77,8 @@ docs/
 ├── CONFIGURATION.md             # Configuration reference
 ├── TEMPLATE_SYSTEM.md           # Template system guide
 ├── LOOP_DETECTION.md            # Agent loop detection
-└── VLLM_SETUP.md                # vLLM setup guide
+├── VLLM_SETUP.md                # vLLM setup guide
+└── tools/                       # Tool pack development docs and examples
 ```
 
 ## Features Overview

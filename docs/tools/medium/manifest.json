@@ -1,0 +1,13 @@
+{
+  "metadata": {
+    "name": "Repository Inspector",
+    "tag": "repo-inspector",
+    "version": "1.0.0",
+    "description": "Medium complexity sample with command execution and output shaping.",
+    "author": "NeoFlow Docs",
+    "license": "MIT"
+  },
+  "tools": [
+    "tools/repo_snapshot_tool.py"
+  ]
+}

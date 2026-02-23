@@ -162,6 +162,7 @@ Comprehensive documentation is available in the [docs/](docs/) directory:
 - **[Template System](docs/TEMPLATE_SYSTEM.md)** - Reusable query templates
 - **[Loop Detection](docs/LOOP_DETECTION.md)** - Agent loop safeguards
 - **[Dictionary Compression](docs/DICTIONARY_COMPRESSION.md)** - Context compression details
+- **[Tool Packs](docs/tools/README.md)** - Build and manage custom agent tools
 
 See [docs/README.md](docs/README.md) for the full documentation index.
 

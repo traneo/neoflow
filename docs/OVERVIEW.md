@@ -6,6 +6,7 @@
 - [Architecture](#architecture)
 - [Key Features](#key-features)
 - [Getting Started](#getting-started)
+- [Tool Packs Quick Start](#tool-packs-quick-start)
 - [Documentation Index](#documentation-index)
 
 ## Overview
@@ -171,6 +172,30 @@ export OLLAMA_MODEL=qwen3-coder:latest
 ```
 
 See [Configuration Guide](CONFIGURATION.md) for detailed options.
+
+## Tool Packs Quick Start
+
+Create, package, and install custom agent tools in minutes:
+
+```bash
+# 1) Scaffold a new pack source
+neoflow tool new -n "Workspace Utilities"
+
+# 2) Implement tools, then validate
+neoflow tool validate workspace-utilities
+
+# 3) Build package
+neoflow tool build workspace-utilities
+
+# 4) Install package
+neoflow tool install workspace-utilities-v1.0.0.ntp
+
+# 5) Verify installation
+neoflow tool list
+```
+
+Installed tools are loaded automatically when you run `neoflow agent ...`.
+For manifest schema, security rules, and complete examples, see [Tool Packs](tools/README.md).
 
 ## Documentation Index
 

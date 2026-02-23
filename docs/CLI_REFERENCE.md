@@ -307,6 +307,58 @@ For full manifest and lifecycle details, see [Knowledge Pack](KNOWLEDGE_PACK.md)
 
 ---
 
+### Tool Pack Commands
+
+Create, validate, build, install, uninstall, and list custom agent tool packs (`.ntp`).
+
+```bash
+neoflow tool new -n "My Tool Pack" [-o <parent-dir>] [--force]
+neoflow tool validate <path/to/pack-source>
+neoflow tool build <path/to/pack-source> [-o <output/folder>]
+neoflow tool install <file.ntp>
+neoflow tool uninstall <tag-or-name>
+neoflow tool list
+```
+
+**Subcommands:**
+
+| Subcommand | Description |
+|------------|-------------|
+| `new` | Scaffold a new tool-pack source directory with `manifest.json`, `tools/tool_definition.py`, and one starter tool |
+| `validate` | Validate `manifest.json` fields and referenced tool files |
+| `build` | Build a `.ntp` archive from a validated source directory |
+| `install` | Install a `.ntp` package into `~/.neoflow/tools/<tag>/` |
+| `uninstall` | Remove an installed tool pack by `tag` or `name` |
+| `list` | Show all installed tool packs from `~/.neoflow/tool-pack.json` |
+
+**Example workflow:**
+
+```bash
+# 1) Create scaffold
+neoflow tool new -n "Workspace Utilities"
+
+# 2) Implement your tool(s), then validate
+neoflow tool validate workspace-utilities
+
+# 3) Build package
+neoflow tool build workspace-utilities
+
+# 4) Install package
+neoflow tool install workspace-utilities-v1.0.0.ntp
+
+# 5) Confirm installation
+neoflow tool list
+```
+
+**Runtime behavior:**
+- Installed packs are loaded automatically when `neoflow agent ...` starts.
+- Custom tool names cannot override built-in reserved actions.
+- Tools marked `security_level = "unsafe"` load only when `AGENT_UNSAFE_MODE=true`.
+
+For full manifest schema, tool contract, and sample packs, see [Tool Packs](tools/README.md).
+
+---
+
 ### Database Commands
 
 Manage Weaviate database collections.

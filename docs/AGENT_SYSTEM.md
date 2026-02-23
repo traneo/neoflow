@@ -10,6 +10,7 @@ Comprehensive guide to NeoFlow's autonomous agent system for complex task execut
 - [Usage](#usage)
 - [Planning System](#planning-system)
 - [Available Tools](#available-tools)
+- [Custom Tool Packs](#custom-tool-packs)
 - [Domain Knowledge](#domain-knowledge)
 - [Task Management](#task-management)
 - [Examples](#examples)
@@ -301,6 +302,36 @@ Execute shell commands. By default, commands require user approval and run with 
 # > ls -la | grep test && echo done
 # (pipes, redirects, && chains all supported)
 ```
+
+## Custom Tool Packs
+
+NeoFlow can load custom agent tools from installed `.ntp` tool packs at runtime.
+
+### How It Works
+
+1. Build a pack from a source directory with `manifest.json` and one or more Python tool files.
+2. Install it with `neoflow tool install <pack>.ntp`.
+3. On next `neoflow agent ...` run, NeoFlow loads installed packs from `~/.neoflow/tools/<tag>/`.
+4. Loaded tool descriptions are injected into the agent system prompt under **Installed Tool Packs**.
+
+### Runtime Rules
+
+- Custom tool names must match: `^[a-z][a-z0-9_]*$`
+- Built-in actions are reserved and cannot be overridden (`run_command`, `read_file`, `edit_file`, etc.)
+- Tools with `security_level = "unsafe"` load only when `AGENT_UNSAFE_MODE=true`
+- Each tool file listed in `manifest.json` must export `register_tools() -> list[ToolDefinition]`
+
+### CLI Lifecycle
+
+```bash
+neoflow tool new -n "My Tool Pack"
+neoflow tool validate my-tool-pack
+neoflow tool build my-tool-pack
+neoflow tool install my-tool-pack-v1.0.0.ntp
+neoflow tool list
+```
+
+See [Tool Packs documentation](tools/README.md) for manifest schema, security model, and end-to-end examples.
 
 ### Delegation
 

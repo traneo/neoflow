@@ -72,6 +72,14 @@ NeoFlow also uses a user-level directory at `~/.neoflow/` for shared resources:
 └── agent_system_prompt/       # Domain prompt files used by @domain mentions
 ```
 
+For tool packs, NeoFlow also manages:
+
+```
+~/.neoflow/
+├── tool-pack.json             # Installed tool pack registry
+└── tools/                     # Extracted tool packs by tag
+```
+
 On first run, NeoFlow bootstraps these folders by copying bundled defaults into
 `~/.neoflow/` (without overwriting existing user files).
 
@@ -282,6 +290,23 @@ SERVER_MAX_SESSIONS=100
 - `cors_origins`: Allowed CORS origins
 - `session_ttl_minutes`: Session lifetime
 - `max_sessions`: Max concurrent sessions
+
+### Tool Pack Configuration
+
+```python
+@dataclass
+class ToolConfig:
+  allow_unsafe_tool_packs: bool = False
+```
+
+**Description:**
+- `allow_unsafe_tool_packs`: Reserved configuration flag for future install-time policy checks.
+
+**Current runtime behavior:**
+- Tool loading safety is currently enforced by `AGENT_UNSAFE_MODE`.
+- Custom tools with `security_level = "unsafe"` are skipped unless `AGENT_UNSAFE_MODE=true`.
+
+For full tool-pack lifecycle and examples, see [Tool Packs](tools/README.md).
 
 ### Main Configuration
 

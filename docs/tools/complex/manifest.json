@@ -1,0 +1,13 @@
+{
+  "metadata": {
+    "name": "Release Ops",
+    "tag": "release-ops",
+    "version": "1.0.0",
+    "description": "Complex sample with multi-tool registration and mixed security levels.",
+    "author": "NeoFlow Docs",
+    "license": "MIT"
+  },
+  "tools": [
+    "tools/release_tools.py"
+  ]
+}
