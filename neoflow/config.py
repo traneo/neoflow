@@ -343,6 +343,25 @@ CHUNK_SIZE_BYTES=2000
         ).lower() in ("true", "1", "yes")
         return config
 
+    def get_active_model_name(self) -> str:
+        """Return the active model name based on the configured provider.
+
+        Uses the provider setting to select which model name is relevant.
+        For ``"auto"``, falls back to the OpenAI model when an API key is
+        present, otherwise returns the Ollama model name.
+        """
+        provider = self.llm_provider.provider.lower()
+        if provider == "openai":
+            return self.llm_provider.openai_model
+        if provider == "vllm":
+            return self.llm_provider.vllm_model
+        if provider == "ollama":
+            return self.llm_provider.ollama_model
+        # auto — best-effort guess
+        if self.llm_provider.openai_api_key:
+            return self.llm_provider.openai_model
+        return self.llm_provider.ollama_model
+
     def get_weaviate_vector_config(self):
         """Get Weaviate vector config based on selected provider.
         

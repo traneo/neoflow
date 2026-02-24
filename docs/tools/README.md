@@ -66,6 +66,10 @@ neoflow tool uninstall <tag>
   },
   "tools": [
     "tools/example_tool.py"
+  ],
+  "dependencies": [
+    "requests>=2.28",
+    "httpx"
   ]
 }
 ```
@@ -75,6 +79,27 @@ neoflow tool uninstall <tag>
 - `metadata.name`, `tag`, `version`, `description`, `author`, `license` are required
 - `metadata.version` must be semver: `X.Y.Z`
 - `tools` must be a list of existing Python file paths
+- `dependencies` is optional; if present, must be a list of non-empty pip requirement specifiers
+
+## Dependencies
+
+Tool packs can declare Python package requirements via the optional `dependencies` field.
+
+**Behaviour at install time:**
+
+- Each entry is installed with `sys.executable -m pip install <dep>` — no `--break-system-packages` or system-level overrides are used.
+- Packages install into the Python environment neoflow is running in (typically its own venv).
+- If any package fails to install, the pack is still registered and the failed specifiers are recorded in `~/.neoflow/tool-pack.json` under `failed_dependencies` for that entry.
+
+**At uninstall time:**
+
+- Dependencies are **not** removed automatically; other packs or the user may rely on them.
+
+**Example:**
+
+```json
+"dependencies": ["requests>=2.28", "boto3", "pydantic>=2"]
+```
 
 ## Tool Contract
 

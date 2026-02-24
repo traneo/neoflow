@@ -563,9 +563,59 @@ def _print_chat_help():
     table.add_row("/t=TEMPLATE", "Load a YAML template form and run its query")
     table.add_row("/agent", "Toggle agent mode on/off — LLM interacts with filesystem/commands")
     table.add_row("/init", "Create a .neoflow/ project config folder in the current directory")
+    table.add_row("/tools", "List all tools available to the agent (built-ins + installed packs)")
     table.add_row("/help", "Show this help message")
     console.print(table)
     console.print()
+
+
+def _print_tools_table(config: Config):
+    """Print all tools registered in the agent's tool registry."""
+    from neoflow.agent.tool_registry import ToolRegistry, RESERVED_TOOL_NAMES
+    from neoflow.agent.agent import _load_installed_tool_packs
+
+    registry = ToolRegistry()
+    _load_installed_tool_packs(registry, config)
+
+    # Separate built-ins from pack tools
+    builtin_tools = []
+    pack_tools = []
+    for name, tool in sorted(registry._tools.items()):
+        if name in RESERVED_TOOL_NAMES:
+            builtin_tools.append(tool)
+        else:
+            pack_tools.append(tool)
+
+    security_color = {"safe": "green", "approval": "yellow", "unsafe": "red"}
+
+    def _make_table(title: str, tools: list, border: str) -> Table:
+        t = Table(title=title, show_header=True, border_style=border, expand=False)
+        t.add_column("Tool", style="bold cyan", no_wrap=True)
+        t.add_column("Icon", no_wrap=True)
+        t.add_column("Security", no_wrap=True)
+        t.add_column("Primary Param", style="dim", no_wrap=True)
+        for tool in tools:
+            color = security_color.get(tool.security_level, "white")
+            t.add_row(
+                tool.name,
+                tool.icon,
+                f"[{color}]{tool.security_level}[/{color}]",
+                tool.primary_param or "—",
+            )
+        return t
+
+    if builtin_tools:
+        console.print(_make_table("Built-in Tools", builtin_tools, "blue"))
+
+    if pack_tools:
+        console.print(_make_table("Installed Tool Packs", pack_tools, "yellow"))
+    else:
+        console.print("[dim]No tool packs installed.[/dim]")
+
+    console.print(
+        f"\n[dim]{len(builtin_tools)} built-in tool(s), {len(pack_tools)} pack tool(s). "
+        "Use [bold]#tool_name text[/bold] to invoke a pack tool directly.[/dim]\n"
+    )
 
 
 def _save_chat_history(history: list[dict], config: Config):
@@ -889,6 +939,9 @@ Contact:
 
             keyword = last_keyword
             console.print(f"\n[dim]Running query: {query}[/dim]")
+        elif lower == "/tools":
+            _print_tools_table(config)
+            continue
         elif lower == "/init":
             from neoflow.init import run_init
             run_init(console)

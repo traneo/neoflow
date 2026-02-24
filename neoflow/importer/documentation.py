@@ -6,7 +6,7 @@ import os
 from weaviate.classes.config import DataType, Property
 
 from neoflow.config import Config
-from neoflow.importer.code_indexer import chunk_content
+from neoflow.importer.chunkers import chunk_doc_content
 from neoflow.weaviate_client import create_weaviate_client
 
 logger = logging.getLogger(__name__)
@@ -87,7 +87,7 @@ def import_documentation(doc_path: str, config: Config, pack_name: str = "manual
                 skipped += 1
                 continue
 
-            chunks = chunk_content(content, config.llm_provider.chunk_size_bytes)
+            chunks = chunk_doc_content(content, config.llm_provider.chunk_size_bytes, full_path)
             for chunk in chunks:
                 collection.data.insert(
                     properties={

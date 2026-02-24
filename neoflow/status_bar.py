@@ -77,18 +77,27 @@ class StatusBar:
         """Tear down the status bar and restore the terminal."""
         if not self._enabled:
             return  # Do nothing if disabled
-        
+
         # Unregister this instance as the active status bar
         from neoflow.agent.input import set_active_status_bar
         set_active_status_bar(None)
-        
-        self._stop_event.set()
-        if self._thread is not None:
-            self._thread.join(timeout=1)
-            self._thread = None
+
+        # Mark inactive FIRST so any in-progress _render() returns early
+        # and the thread cannot start a new render cycle.
         with self._lock:
             self._state.active = False
+
+        # Signal the background thread to exit.
+        self._stop_event.set()
+
+        # Stop the Live display BEFORE joining the thread.  This guarantees
+        # that no escape sequences are written to stdout after stop() returns,
+        # even if the thread is still winding down.
         self._stop_live()
+
+        if self._thread is not None:
+            self._thread.join(timeout=2)
+            self._thread = None
 
     def pause(self) -> None:
         """Pause status rendering (used during prompt input)."""
@@ -282,8 +291,11 @@ class StatusBar:
         renderable = Text(status_line, overflow="ellipsis", no_wrap=True)
 
         with self._draw_lock:
-            if self._live is None and not self._paused:
-                self._start_live()
+            # Only update a Live that was already started by the main thread
+            # (via start() or resume()).  Never call _start_live() from the
+            # background thread — Rich's Live.start() is not safe to call
+            # from a non-main thread and doing so can leave the terminal in a
+            # bad state after the agent finishes.
             if self._live is not None:
                 self._live.update(renderable, refresh=True)
 

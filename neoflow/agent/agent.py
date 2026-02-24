@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 from pathlib import Path
 
 from neoflow.llm_provider import get_provider
@@ -17,6 +18,7 @@ from neoflow.agent.task_executor import TaskExecutor
 from neoflow.agent.tool_registry import ToolRegistry
 from neoflow.config import Config
 from neoflow.init import NEOFLOW_DIR
+from neoflow.model_profiles import resolve_model_profile
 from neoflow.prompts import build_agent_system_prompt
 from neoflow.search.tools import (
     parse_action,
@@ -61,6 +63,50 @@ def _load_installed_tool_packs(registry: ToolRegistry, config: Config) -> None:
         logger.warning("Could not load tool packs: %s", exc)
 
 
+_TOOL_INVOKE_PATTERN = re.compile(r"#(\w+)(?:\s+([^#]*))?")
+
+
+def parse_tool_invocations(
+    text: str, registry: ToolRegistry, config: "Config"
+) -> tuple[list[tuple[str, str]], str]:
+    """Extract and execute explicit ``#tool_name text`` invocations from *text*.
+
+    Returns ``(results, cleaned_text)`` where *results* is a list of
+    ``(tool_name, output)`` pairs for every recognised tool invocation, and
+    *cleaned_text* is *text* with those ``#tool_name …`` fragments removed.
+
+    Tool names that are not registered in *registry* are left untouched.
+    """
+    results: list[tuple[str, str]] = []
+    found_spans: list[tuple[int, int]] = []
+
+    for match in _TOOL_INVOKE_PATTERN.finditer(text):
+        tool_name = match.group(1)
+        tool_def = registry.get(tool_name)
+        if tool_def is None:
+            continue  # not a known tool — leave in text
+        raw_input = (match.group(2) or "").strip()
+        action: dict = {"action": tool_name}
+        if tool_def.primary_param:
+            action[tool_def.primary_param] = raw_input
+        elif raw_input:
+            action["text"] = raw_input
+        try:
+            output = tool_def.execute(action, config)
+        except Exception as exc:
+            output = f"Error: {exc}"
+        results.append((tool_name, output))
+        found_spans.append((match.start(), match.end()))
+
+    # Remove matched spans in reverse order to preserve indices
+    cleaned = text
+    for start, end in reversed(found_spans):
+        cleaned = cleaned[:start] + cleaned[end:]
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+
+    return results, cleaned
+
+
 def run_agent(task: str, config: Config, console: Console, bar: StatusBar | None = None):
     """Run the agentic loop for a given task description."""
     # Build tool registry (built-ins + installed packs)
@@ -71,16 +117,43 @@ def run_agent(task: str, config: Config, console: Console, bar: StatusBar | None
     domain_names, cleaned_task = parse_domain_mentions(task)
     domain_content = load_domains(domain_names)
     system_prompt = build_agent_system_prompt(registry)
-    if domain_content:
-        system_prompt = system_prompt + "\n" + domain_content + "\n"
+
+    # Wrap the system prompt with model-specific instruction tags.
+    active_model = config.get_active_model_name()
+    profile = resolve_model_profile(active_model)
+    system_prompt = profile.wrap_system_prompt(system_prompt)
+    logger.debug("Model profile '%s' applied for model '%s'", profile.name, active_model)
 
     # Load project-local .neoflow/ configuration
     system_prompt = _load_neoflow_config(system_prompt)
 
+    # Domain overrides come LAST so they supersede all other prompt content.
+    # Wrapped with a hard-override header so the LLM treats them as binding.
+    if domain_content:
+        system_prompt = (
+            system_prompt
+            + "\n\n## ACTIVE DOMAIN OVERRIDE (highest priority — supersedes all instructions above)\n\n"
+            + domain_content
+            + "\n"
+        )
+
+    # Handle explicit #tool_name invocations — execute immediately and bypass
+    # the agent loop when the whole input was a tool invocation.
+    tool_results, cleaned_task = parse_tool_invocations(cleaned_task, registry, config)
+    if tool_results:
+        for tool_name, output in tool_results:
+            _safe_console_print(
+                console, bar,
+                Panel(output, title=f"[bold yellow]{tool_name}[/bold yellow]", border_style="yellow"),
+            )
+        if not cleaned_task:
+            # Nothing left for the agent to do — return immediately.
+            return
+
     # Compact init line
     domain_info = f" | {', '.join(domain_names)}" if domain_names else ""
     _safe_console_print(console, bar, "\n[bold green]Agent Online: Initiating Shenanigans...[/bold green]")
-    _safe_console_print(console, bar, f"\n[bold]Prompt[/bold]: {cleaned_task} [dim]({config.llm_provider.ollama_model}{domain_info})[/dim]")
+    _safe_console_print(console, bar, f"\n[bold]Prompt[/bold]: {cleaned_task} [dim]({active_model}{domain_info})[/dim]")
 
     # Use provided bar or create a new one
     if bar is None:
@@ -326,6 +399,7 @@ def _agent_step(
     if provider is None:
         provider = get_provider(config.llm_provider.provider)
     model = getattr(config.llm_provider, f"{provider.get_name()}_model", None)
+    step_profile = resolve_model_profile(model or "")
 
     # Use retry logic with error handling
     response = retry_llm_request(
@@ -354,6 +428,8 @@ def _agent_step(
                 reply = response.get("message", {}).get("content", "")
     except Exception:
         reply = ""
+    # Strip model-specific control tokens (e.g. Harmony channel headers for gpt-oss)
+    reply = step_profile.clean_reply(reply)
     optimizer.add_message(messages, {"role": "assistant", "content": reply})
     optimizer.optimize(messages)
     status_bar.increment_messages()

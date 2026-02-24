@@ -21,8 +21,14 @@ Manifest format (``manifest.json`` inside the ``.ntp`` zip)::
         "author": "...",
         "license": "MIT"
       },
-      "tools": ["tools/git_tool.py", "tools/http_tool.py"]
+      "tools": ["tools/git_tool.py", "tools/http_tool.py"],
+      "dependencies": ["requests>=2.28", "httpx"]
     }
+
+``dependencies`` is optional.  When present, each entry is a pip requirement
+specifier.  They are installed with ``sys.executable -m pip install`` into the
+active Python environment (no system-level overrides).  Dependencies are
+recorded in the registry but are **not** uninstalled when the pack is removed.
 
 Each Python file must export ``register_tools() -> list[ToolDefinition]``.
 """
@@ -32,6 +38,8 @@ from __future__ import annotations
 import json
 import re
 import shutil
+import subprocess
+import sys
 import tempfile
 import zipfile
 from datetime import datetime
@@ -45,6 +53,32 @@ TOOL_REGISTRY_FILENAME = "tool-pack.json"
 TOOL_PACK_DIR = "tools"
 
 _SEMVER_PATTERN = re.compile(r"^\d+\.\d+\.\d+$")
+
+
+def _install_tool_dependencies(deps: list[str]) -> list[str]:
+    """Install pip packages into the active Python environment.
+
+    Uses ``sys.executable -m pip install`` so packages land in whichever
+    environment neoflow itself is running in (typically its own venv).
+    No ``--break-system-packages``, ``--user``, or other override flags are
+    used — pip's default behaviour is intentionally preserved.
+
+    Args:
+        deps: Pip requirement specifiers, e.g. ``["requests>=2.28", "httpx"]``.
+
+    Returns:
+        List of specifiers that failed to install (empty means all succeeded).
+    """
+    failed: list[str] = []
+    for dep in deps:
+        result = subprocess.run(
+            [sys.executable, "-m", "pip", "install", dep],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            failed.append(dep)
+    return failed
 
 
 def _slugify_tool_tag(name: str) -> str:
@@ -169,6 +203,15 @@ def validate_tool_manifest(manifest: dict, package_root: Path) -> list[str]:
             full = (package_root / tool_path).resolve()
             if not full.is_file():
                 errors.append(f"tool file not found: {tool_path}")
+
+    deps = manifest.get("dependencies")
+    if deps is not None:
+        if not isinstance(deps, list):
+            errors.append("dependencies must be a list of pip requirement specifiers")
+        else:
+            for dep in deps:
+                if not _is_non_empty_string(dep):
+                    errors.append("dependencies entries must be non-empty strings")
 
     return errors
 
@@ -306,6 +349,12 @@ def install_tool_pack(package_file: str, config=None) -> dict:
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(full_path, dest)
 
+    # Install declared dependencies into the active Python environment.
+    deps = manifest.get("dependencies") or []
+    failed_deps: list[str] = []
+    if deps:
+        failed_deps = _install_tool_dependencies(deps)
+
     registry_entry = {
         "name": metadata_block["name"],
         "tag": tag,
@@ -313,7 +362,10 @@ def install_tool_pack(package_file: str, config=None) -> dict:
         "description": metadata_block.get("description", ""),
         "author": metadata_block.get("author", ""),
         "install_path": str(get_neoflow_tools_dir() / tag),
+        "dependencies": deps,
     }
+    if failed_deps:
+        registry_entry["failed_dependencies"] = failed_deps
     registry["tool-packs"].append(registry_entry)
     save_tool_registry(registry)
 

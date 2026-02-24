@@ -354,6 +354,7 @@ neoflow tool list
 - Installed packs are loaded automatically when `neoflow agent ...` starts.
 - Custom tool names cannot override built-in reserved actions.
 - Tools marked `security_level = "unsafe"` load only when `AGENT_UNSAFE_MODE=true`.
+- If `manifest.json` declares `dependencies`, they are installed with `pip install` (into neoflow's venv) when `neoflow tool install` runs. Any failures are recorded in `~/.neoflow/tool-pack.json` under `failed_dependencies` but do not block installation.
 
 For full manifest schema, tool contract, and sample packs, see [Tool Packs](tools/README.md).
 

@@ -156,9 +156,9 @@ _AGENT_EPILOGUE = """
    - Escape backslashes inside strings: `\\\\`
    - Prefer `write_file`/`edit_file` over embedding file content in `run_command` — it requires only standard JSON escaping with no shell layer.
 
-9. **Never Use** Harmony format request and response structures. Always use the specified JSON action format.
+9. **Verify File Operations** — After `write_file`, `edit_file`, or `delete_file`, the result message confirms success or describes the error. If the result is an error, do not assume the operation succeeded. Use `read_file` to verify the final state when in doubt.
 
-10. **Verify File Operations** — After `write_file`, `edit_file`, or `delete_file`, the result message confirms success or describes the error. If the result is an error, do not assume the operation succeeded. Use `read_file` to verify the final state when in doubt.
+10. **Command Output** — When running commands, always check the output for success or failure. If a command fails, analyze the error message in your reasoning and adjust your approach accordingly.
 
 # Best Practices
 

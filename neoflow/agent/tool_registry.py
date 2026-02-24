@@ -777,13 +777,38 @@ class ToolRegistry:
         tool_files: list[str] = manifest.get("tools", [])
         loaded_names: list[str] = []
 
+        # Determine the common directory that holds all tool files.
+        # We create a synthetic Python package rooted here so that both
+        # absolute imports (from tool_definition import ...) and relative
+        # imports (from .tool_definition import ...) resolve correctly.
+        tool_dirs: set[Path] = {
+            (pack_dir / rel).parent
+            for rel in tool_files
+            if (pack_dir / rel).is_file()
+        }
+        # Register one synthetic package per unique tool directory.
+        pkg_map: dict[Path, str] = {}
+        for td in tool_dirs:
+            pkg_name = f"neoflow_toolpack_{tag}_{td.stem}"
+            if pkg_name not in sys.modules:
+                import types as _types
+                pkg = _types.ModuleType(pkg_name)
+                pkg.__path__ = [str(td)]  # marks it as a package
+                pkg.__package__ = pkg_name
+                sys.modules[pkg_name] = pkg
+            pkg_map[td] = pkg_name
+
         for tool_rel_path in tool_files:
             tool_file = pack_dir / tool_rel_path
             if not tool_file.is_file():
                 logger.warning("Tool file not found in pack '%s': %s", tag, tool_rel_path)
                 continue
 
-            module_name = f"neoflow_tool_{tag}_{tool_file.stem}"
+            tool_dir_path = tool_file.parent
+            pkg_name = pkg_map.get(tool_dir_path, f"neoflow_tool_{tag}_{tool_file.stem}")
+            # Load as a submodule of the synthetic package so relative imports work.
+            module_name = f"{pkg_name}.{tool_file.stem}"
+            tool_dir_str = str(tool_dir_path)
             try:
                 spec = importlib.util.spec_from_file_location(module_name, tool_file)
                 if spec is None or spec.loader is None:
@@ -791,8 +816,22 @@ class ToolRegistry:
                     continue
 
                 mod = importlib.util.module_from_spec(spec)
+                mod.__package__ = pkg_name  # required for relative imports
                 sys.modules[module_name] = mod
-                spec.loader.exec_module(mod)  # type: ignore[union-attr]
+                # Also expose as attribute on the package so intra-pack imports resolve.
+                pkg_mod = sys.modules.get(pkg_name)
+                if pkg_mod is not None:
+                    setattr(pkg_mod, tool_file.stem, mod)
+                # Add the tool directory to sys.path for absolute sibling imports.
+                inserted = False
+                if tool_dir_str not in sys.path:
+                    sys.path.insert(0, tool_dir_str)
+                    inserted = True
+                try:
+                    spec.loader.exec_module(mod)  # type: ignore[union-attr]
+                finally:
+                    if inserted and tool_dir_str in sys.path:
+                        sys.path.remove(tool_dir_str)
 
                 if not hasattr(mod, "register_tools"):
                     logger.warning(

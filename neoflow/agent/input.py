@@ -33,21 +33,38 @@ def set_active_status_bar(bar) -> None:
     _active_status_bar.set(bar)
 
 
-_MENTION_PATTERN = re.compile(r"@\w*")
+_MENTION_PATTERN = re.compile(r"[@#]\w*")
+
+
+def _list_tool_pack_names() -> list[str]:
+    """Return names of all installed tool pack tools, best-effort (never raises)."""
+    try:
+        from neoflow.tool_pack import load_tool_registry
+        reg = load_tool_registry()
+        return [entry.get("name", "") for entry in reg.get("tool-packs", []) if entry.get("name")]
+    except Exception:
+        return []
 
 
 class DomainCompleter(Completer):
-    """Autocomplete @domain mentions from available domain prompt files."""
+    """Autocomplete @domain mentions and #tool_name invocations."""
 
     def get_completions(self, document: Document, complete_event):
         word = document.get_word_before_cursor(pattern=_MENTION_PATTERN)
-        if not word or not word.startswith("@"):
+        if not word:
             return
-        prefix = word[1:]  # strip the leading @
-        for name in list_domains():
-            if name.startswith(prefix):
-                # Replace the entire @prefix with @name
-                yield Completion(f"@{name}", start_position=-len(word))
+
+        if word.startswith("@"):
+            prefix = word[1:]
+            for name in list_domains():
+                if name.startswith(prefix):
+                    yield Completion(f"@{name}", start_position=-len(word))
+
+        elif word.startswith("#"):
+            prefix = word[1:]
+            for name in _list_tool_pack_names():
+                if name.startswith(prefix):
+                    yield Completion(f"#{name}", start_position=-len(word))
 
 
 class AgentCancelled(Exception):
